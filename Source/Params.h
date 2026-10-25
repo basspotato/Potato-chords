@@ -6,6 +6,8 @@
 // Every host parameter: ID, range and default. IDs are permanent once released.
 namespace pc::params
 {
+    constexpr double strumMaxSeconds = 0.04;
+
     inline const juce::ParameterID key       { "key", 1 };
     inline const juce::ParameterID scale     { "scale", 1 };
     inline const juce::ParameterID flavour   { "flavour", 1 };
@@ -20,6 +22,7 @@ namespace pc::params
     inline const juce::ParameterID melodySound { "melodySound", 1 };
     inline const juce::ParameterID chorus    { "chorus", 1 };
     inline const juce::ParameterID reverb    { "reverb", 1 };
+    inline const juce::ParameterID strum     { "strum", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -55,6 +58,8 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
+        // Chord notes roll in from low to high, 0-1 = up to strumMaxSeconds between notes (MIDI out too)
+        layout.add (std::make_unique<juce::AudioParameterFloat> (strum, "Strum", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
         // Effects on the preview sound only, 0-1
         layout.add (std::make_unique<juce::AudioParameterFloat> (chorus, "Chorus", juce::NormalisableRange<float> (0.0f, 1.0f), 0.15f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (reverb, "Reverb", juce::NormalisableRange<float> (0.0f, 1.0f), 0.25f));

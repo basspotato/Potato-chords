@@ -28,6 +28,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     melodySoundParam = apvts.getRawParameterValue (melodySound.getParamID());
     chorusParam = apvts.getRawParameterValue (chorus.getParamID());
     reverbParam = apvts.getRawParameterValue (reverb.getParamID());
+    strumParam = apvts.getRawParameterValue (strum.getParamID());
 
     out.ensureSize (8192);
 }
@@ -103,21 +104,45 @@ void PotatoChordsProcessor::playChord (int degree, juce::uint8 velocity, int sam
                                                   (pc::theory::Flavour) chordSettings.flavour, chordSettings.majorFive);
     previousClose = pc::voicing::closeVoicing (chord, previousClose);
     playing = pc::voicing::applySpread (chord, previousClose, (pc::voicing::Spread) chordSettings.spread);
-    for (int i = 0; i < playing.size; ++i)
-        tracker.noteOn (out, chordChannel, playing.notes[(size_t) i], velocity, samplePos);
+    startNotes (liveOwner, playing, velocity, samplePos);
     currentDegree = degree;
     chordVelocity = velocity;
 }
 
 void PotatoChordsProcessor::stopChord (int samplePos)
 {
-    for (int i = 0; i < playing.size; ++i)
-        tracker.noteOff (out, chordChannel, playing.notes[(size_t) i], samplePos);
+    stopNotes (liveOwner, playing, samplePos);
     playing.size = 0;
+}
+
+// A chord's notes, low to high and `strum` apart; the lowest goes out on samplePos
+void PotatoChordsProcessor::startNotes (int owner, const pc::voicing::Voiced& notes, juce::uint8 velocity, int samplePos)
+{
+    const double gap = strumParam->load() * pc::params::strumMaxSeconds * sampleRate;
+    for (int i = 0; i < notes.size; ++i)
+    {
+        const int note = notes.notes[(size_t) i];
+        int rank = 0;
+        for (int j = 0; j < notes.size; ++j)
+            rank += notes.notes[(size_t) j] < note || (notes.notes[(size_t) j] == note && j < i) ? 1 : 0;
+        const auto delay = (int64_t) std::llround (gap * rank);
+        if (delay == 0) tracker.noteOn (out, chordChannel, note, velocity, samplePos);
+        else            strummer.add (owner, chordChannel, note, velocity, blockStart + samplePos + delay);
+    }
+}
+
+// Notes due before the stop still go out first; later ones never start
+void PotatoChordsProcessor::stopNotes (int owner, const pc::voicing::Voiced& notes, int samplePos)
+{
+    strummer.fireUntil (tracker, out, blockStart, blockStart + samplePos, owner);
+    for (int i = 0; i < notes.size; ++i)
+        if (! strummer.cancel (owner, chordChannel, notes.notes[(size_t) i]))
+            tracker.noteOff (out, chordChannel, notes.notes[(size_t) i], samplePos);
 }
 
 void PotatoChordsProcessor::flushAll (int samplePos)
 {
+    strummer.clear();
     tracker.allOff (out, samplePos);
     playing.size = 0;
     lanePlaying.size = 0;
@@ -233,14 +258,12 @@ void PotatoChordsProcessor::startLaneHit (const pc::sequencer::Hit& hit, int sam
         lanePlaying.size = 1;
         lanePlaying.notes[0] = juce::jmin (127, laneVoicing.notes[(size_t) (hit.arp % laneVoicing.size)] + 12 * (hit.arp / laneVoicing.size));
     }
-    for (int i = 0; i < lanePlaying.size; ++i)
-        tracker.noteOn (out, chordChannel, lanePlaying.notes[(size_t) i], 100, samplePos);
+    startNotes (laneOwner, lanePlaying, 100, samplePos);
 }
 
 void PotatoChordsProcessor::stopLaneChord (int samplePos)
 {
-    for (int i = 0; i < lanePlaying.size; ++i)
-        tracker.noteOff (out, chordChannel, lanePlaying.notes[(size_t) i], samplePos);
+    stopNotes (laneOwner, lanePlaying, samplePos);
     lanePlaying.size = 0;
 }
 
@@ -471,6 +494,8 @@ void PotatoChordsProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     handleMidi (midi, chordKeysParam->load() > 0.5f, true);
     runLane (buffer.getNumSamples());
+    strummer.fireUntil (tracker, out, blockStart, blockStart + buffer.getNumSamples());
+    blockStart += buffer.getNumSamples();
     captureOutput (buffer.getNumSamples());
     renderPreview (buffer);
     midi.swapWith (out);
@@ -494,6 +519,8 @@ void PotatoChordsProcessor::processBlockBypassed (juce::AudioBuffer<float>& buff
     laneRunning = false;
     laneCurrent = -1;
     handleMidi (midi, false, false);
+    strummer.fireUntil (tracker, out, blockStart, blockStart + buffer.getNumSamples());
+    blockStart += buffer.getNumSamples();
     midi.swapWith (out);
     buffer.clear();
     synth.killAll();

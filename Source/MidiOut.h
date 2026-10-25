@@ -63,4 +63,57 @@ namespace pc::midiout
     private:
         std::array<std::array<juce::uint8, 128>, 16> counts {};
     };
+
+    // Note-ons held back for a strum, each sent on its own sample, possibly in a later block.
+    // Times are absolute sample counts. An owner's notes are fired before its next change, so its
+    // note-ons and note-offs always stay in time order.
+    class Strummer
+    {
+    public:
+        static constexpr int capacity = 32;
+
+        void clear() { for (auto& p : pending) p.active = false; }
+
+        void add (int owner, int channel, int note, juce::uint8 velocity, int64_t time)
+        {
+            for (auto& p : pending)
+                if (! p.active) { p = { time, owner, channel, note, velocity, true }; return; }
+        }
+
+        // Sends every note-on of `owner` (or of all owners, -1) due before `until`
+        void fireUntil (NoteTracker& tracker, juce::MidiBuffer& out, int64_t blockStart, int64_t until, int owner = -1)
+        {
+            for (auto& p : pending)
+                if (p.active && p.time < until && (owner < 0 || p.owner == owner))
+                {
+                    tracker.noteOn (out, p.channel, p.note, p.velocity, (int) (p.time - blockStart));
+                    p.active = false;
+                }
+        }
+
+        // Drops a note that has not gone out yet; true if it was still waiting
+        bool cancel (int owner, int channel, int note)
+        {
+            for (auto& p : pending)
+                if (p.active && p.owner == owner && p.channel == channel && p.note == note) { p.active = false; return true; }
+            return false;
+        }
+
+        int numPending() const
+        {
+            int n = 0;
+            for (auto& p : pending) n += p.active ? 1 : 0;
+            return n;
+        }
+
+    private:
+        struct Pending
+        {
+            int64_t time = 0;
+            int owner = 0, channel = 1, note = 0;
+            juce::uint8 velocity = 0;
+            bool active = false;
+        };
+        std::array<Pending, capacity> pending {};
+    };
 }

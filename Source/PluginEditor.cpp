@@ -53,7 +53,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       playLane (param (p, pc::params::playLane), "Play with host"),
       learn (param (p, pc::params::learn), "Learn"),
       chorusFader (param (p, pc::params::chorus), "Chorus"),
-      reverbFader (param (p, pc::params::reverb), "Reverb")
+      reverbFader (param (p, pc::params::reverb), "Reverb"),
+      strumFader (param (p, pc::params::strum), "Strum")
 {
     setLookAndFeel (&look);
 
@@ -143,7 +144,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -199,7 +200,8 @@ juce::File PotatoChordsEditor::laneFile()
     return pc::midiexport::writeTemp (
         pc::midiexport::laneToMidi (proc.lane.snapshot(), value (pc::params::key), (pc::theory::Scale) value (pc::params::scale),
                                     (pc::voicing::Spread) value (pc::params::spread), proc.hostBpm(), proc.barQuarters(),
-                                    value (pc::params::rhythm)),
+                                    value (pc::params::rhythm), PotatoChordsProcessor::chordChannel,
+                                    proc.apvts.getRawParameterValue (pc::params::strum.getParamID())->load() * pc::params::strumMaxSeconds),
         "Potato-Chords progression");
 }
 
@@ -497,4 +499,5 @@ void PotatoChordsEditor::resized()
     panic.setBounds (right - 128, keyboardY + 3, 120, 26);
     reverbFader.setBounds (right - 128 - 10 - 170, keyboardY + 3, 170, 26);
     chorusFader.setBounds (right - 128 - 10 - 170 - 8 - 170, keyboardY + 3, 170, 26);
+    strumFader.setBounds (right - 128 - 10 - 3 * 170 - 2 * 8 - 24, keyboardY + 3, 170, 26);
 }

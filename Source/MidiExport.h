@@ -81,7 +81,8 @@ namespace pc::midiexport
 
     // The whole progression lane, voiced and played with the rhythm pattern exactly as the plugin plays it
     inline juce::MidiFile laneToMidi (const progression::Snapshot& lane, int key, theory::Scale scale, voicing::Spread spread,
-                                      double bpm, double barQuarters, int patternIndex = 0, int channel = 1)
+                                      double bpm, double barQuarters, int patternIndex = 0, int channel = 1,
+                                      double strumSeconds = 0.0)
     {
         using sequencer::stepQuarters;
         const auto& pattern = sequencer::patterns[(size_t) juce::jlimit (0, sequencer::numPatterns - 1, patternIndex)];
@@ -106,15 +107,25 @@ namespace pc::midiexport
                     if (hit == nullptr) continue;
                     const double on = start + step * stepQuarters;
                     const double off = start + juce::jmin (steps, step + hit->length) * stepQuarters;
-                    auto add = [&] (int note)
+                    const double gap = strumSeconds * bpm / 60.0;  // in quarters
+                    auto add = [&] (int note, int rank)
                     {
-                        seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (on));
+                        // A strummed note that would start after the hit ends is left out, as when played live
+                        const double at = on + rank * gap;
+                        if (at >= off) return;
+                        seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (at));
                         seq.addEvent (juce::MidiMessage::noteOff (channel, note).withTimeStamp (off));
                     };
                     if (hit->arp < 0)
-                        for (int i = 0; i < notes.size; ++i) add (notes.notes[(size_t) i]);
+                        for (int i = 0; i < notes.size; ++i)
+                        {
+                            int rank = 0;
+                            for (int j = 0; j < notes.size; ++j)
+                                rank += notes.notes[(size_t) j] < notes.notes[(size_t) i] || (notes.notes[(size_t) j] == notes.notes[(size_t) i] && j < i) ? 1 : 0;
+                            add (notes.notes[(size_t) i], rank);
+                        }
                     else
-                        add (juce::jmin (127, notes.notes[(size_t) (hit->arp % notes.size)] + 12 * (hit->arp / notes.size)));
+                        add (juce::jmin (127, notes.notes[(size_t) (hit->arp % notes.size)] + 12 * (hit->arp / notes.size)), 0);
                 }
             }
         }

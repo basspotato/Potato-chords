@@ -737,6 +737,73 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void strumTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::strum, 0.5f);  // 20 ms = 960 samples between notes
+    Held held;
+    std::vector<std::pair<long, int>> ons;
+    long clock = 0;
+    auto run = [&] (int blocks)
+    {
+        for (int b = 0; b < blocks; ++b, clock += blockSize)
+        {
+            const auto out = runBlock (*proc, {});
+            held.add (out);
+            for (const auto meta : out)
+                if (meta.getMessage().isNoteOn()) ons.push_back ({ clock + meta.samplePosition, meta.getMessage().getNoteNumber() });
+        }
+    };
+
+    proc->padDown (3);
+    run (10);
+    CHECK ((ons == std::vector<std::pair<long, int>> { { 0, 65 }, { 960, 69 }, { 1920, 72 } }),
+           "strum rolls the chord up from the low note, each on its exact sample across blocks");
+    proc->padUp (3);
+    run (1);
+    CHECK (held.sounding() == 0, "releasing a strummed chord stops every note");
+
+    ons.clear();
+    proc->padDown (4);
+    run (2);  // 512 samples: only the lowest note has started
+    proc->padUp (4);
+    run (10);
+    CHECK (ons.size() == 1 && held.sounding() == 0, "notes of a strum not yet started are dropped when the chord stops");
+
+    proc->padDown (0);
+    run (1);
+    juce::AudioBuffer<float> buffer (2, blockSize);
+    juce::MidiBuffer midi;
+    proc->processBlockBypassed (buffer, midi);
+    held.add (midi);
+    run (10);
+    CHECK (held.sounding() == 0, "bypass mid-strum leaves nothing hanging");
+    CHECK (held.doubledOns == 0 && held.strayOffs == 0, "strum: no doubled note-ons or stray note-offs");
+
+    // The lane, with short hits and the widest strum
+    setParam (*proc, pc::params::strum, 1.0f);
+    setParam (*proc, pc::params::rhythm, 3.0f);  // 8th pulse
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));
+    Held laneHeld;
+    long laneClock = 0;
+    runTransport (*proc, head, 1500, laneHeld, laneClock);
+    head.playing = false;
+    runTransport (*proc, head, 2, laneHeld, laneClock);
+    CHECK (laneHeld.sounding() == 0 && laneHeld.doubledOns == 0 && laneHeld.strayOffs == 0, "strummed lane hits start and stop cleanly");
+
+    // Export keeps the strum: 20 ms at 120 BPM = 0.04 quarters = 38.4 ticks
+    const auto file = pc::midiexport::laneToMidi (pc::presets::fill (pc::presets::progressions[0], Flavour::triad), 0, Scale::major,
+                                                  pc::voicing::Spread::close, 120.0, 4.0, 0, 1, 0.02);
+    std::vector<int> times;
+    for (auto* e : *file.getTrack (0))
+        if (e->message.isNoteOn() && times.size() < 3) times.push_back ((int) e->message.getTimeStamp());
+    CHECK ((times == std::vector<int> { 0, 38, 77 }), "exported progression is strummed the same way");
+}
+
 void fxTests()
 {
     pc::fx::PreviewFx fx;
@@ -863,6 +930,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    strumTests();
     fxTests();
     undoTests();
     processorTests();
