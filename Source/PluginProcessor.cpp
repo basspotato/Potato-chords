@@ -4,6 +4,7 @@
 namespace
 {
     const juce::Identifier versionProperty { "version" };
+    const juce::Identifier progressionProperty { "progression" };
 }
 
 PotatoChordsProcessor::PotatoChordsProcessor()
@@ -21,13 +22,15 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     chordKeysParam = apvts.getRawParameterValue (chordKeys.getParamID());
     soundParam     = apvts.getRawParameterValue (sound.getParamID());
     previewParam   = apvts.getRawParameterValue (preview.getParamID());
+    playLaneParam  = apvts.getRawParameterValue (playLane.getParamID());
 
     out.ensureSize (8192);
 }
 
-void PotatoChordsProcessor::prepareToPlay (double sampleRate, int)
+void PotatoChordsProcessor::prepareToPlay (double newSampleRate, int)
 {
-    synth.prepare (sampleRate);
+    sampleRate = newSampleRate;
+    synth.prepare (newSampleRate);
     out.ensureSize (8192);
     // Anything still held from before goes out as note-offs at the start of the next block
     flushRequested = true;
@@ -54,6 +57,12 @@ pc::theory::Chord PotatoChordsProcessor::chordFor (int degree) const
 {
     const auto s = readSettings();
     return pc::theory::diatonicChord (s.key, (pc::theory::Scale) s.scale, degree, (pc::theory::Flavour) s.flavour, s.majorFive);
+}
+
+pc::theory::Chord PotatoChordsProcessor::chordFor (const pc::progression::Slot& slot) const
+{
+    const auto s = readSettings();
+    return pc::theory::diatonicChord (s.key, (pc::theory::Scale) s.scale, std::max (0, slot.degree), slot.flavour, slot.majorFive);
 }
 
 bool PotatoChordsProcessor::keyUsesFlats() const
@@ -105,6 +114,9 @@ void PotatoChordsProcessor::flushAll (int samplePos)
 {
     tracker.allOff (out, samplePos);
     playing.size = 0;
+    lanePlaying.size = 0;
+    laneRunning = false;  // the lane restarts its current chord on the next block if the host is playing
+    laneCurrent = -1;
     source = Source::none;
     currentDegree = -1;
     for (auto& ch : passHeld) ch.fill (false);
@@ -185,6 +197,120 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
     }
 }
 
+void PotatoChordsProcessor::startLaneChord (const pc::progression::Slot& slot, int samplePos)
+{
+    stopLaneChord (samplePos);
+    if (slot.empty()) return;
+    const auto chord = pc::theory::diatonicChord (laneSettings.key, (pc::theory::Scale) laneSettings.scale, slot.degree,
+                                                  slot.flavour, slot.majorFive);
+    lanePreviousClose = pc::voicing::closeVoicing (chord, lanePreviousClose);
+    lanePlaying = pc::voicing::applySpread (chord, lanePreviousClose, (pc::voicing::Spread) laneSettings.spread);
+    for (int i = 0; i < lanePlaying.size; ++i)
+        tracker.noteOn (out, chordChannel, lanePlaying.notes[(size_t) i], 100, samplePos);
+}
+
+void PotatoChordsProcessor::stopLaneChord (int samplePos)
+{
+    for (int i = 0; i < lanePlaying.size; ++i)
+        tracker.noteOff (out, chordChannel, lanePlaying.notes[(size_t) i], samplePos);
+    lanePlaying.size = 0;
+}
+
+// Plays the lane in time with the host: each slot's chord starts on its exact sample, the lane loops every
+// 8 bars from the song start, and a stop, jump, loop wrap or tempo change never leaves a note hanging.
+void PotatoChordsProcessor::runLane (int numSamples)
+{
+    bool playingNow = false;
+    double ppq = 0.0, bpm = 120.0;
+    int numerator = 4, denominator = 4;
+    if (auto* head = getPlayHead())
+        if (const auto pos = head->getPosition())
+        {
+            playingNow = pos->getIsPlaying();
+            if (const auto p = pos->getPpqPosition()) ppq = *p; else playingNow = false;
+            if (const auto b = pos->getBpm()) bpm = *b;
+            if (const auto ts = pos->getTimeSignature()) { numerator = ts->numerator; denominator = ts->denominator; }
+        }
+    hostPlaying.store (playingNow, std::memory_order_relaxed);
+    blockPlaying = playingNow;
+    blockPpq = ppq;
+    blockBpm = bpm > 0.0 ? bpm : 120.0;
+    lastBpm.store (blockBpm, std::memory_order_relaxed);
+    lastBarQuarters.store (numerator > 0 && denominator > 0 ? numerator * 4.0 / denominator : 4.0, std::memory_order_relaxed);
+
+    if (! playingNow || playLaneParam->load() < 0.5f || bpm <= 0.0 || numSamples <= 0)
+    {
+        stopLaneChord (0);
+        laneRunning = false;
+        laneCurrent = -1;
+        return;
+    }
+
+    const double barQ = numerator > 0 && denominator > 0 ? numerator * 4.0 / denominator : 4.0;
+    const double loopQ = pc::progression::Snapshot::lengthQuarters (barQ);
+    const double ppqPerSample = bpm / 60.0 / sampleRate;
+    const double endPpq = ppq + numSamples * ppqPerSample;
+    const auto snap = lane.snapshot();
+    const auto settings = readSettings();
+    auto inLoop = [loopQ] (double p) { const double m = std::fmod (p, loopQ); return m < 0.0 ? m + loopQ : m; };
+
+    auto changeTo = [&] (int slotIndex, int samplePos)
+    {
+        laneCurrent = slotIndex;
+        const auto chord = snap.chordIn (slotIndex);
+        laneCode = chord.encode();
+        startLaneChord (chord, samplePos);
+    };
+
+    // A jump (start, locate, loop wrap by the host, tempo change that moves the position), an edit to the
+    // current slot or a key change: restart the chord at the top of the block
+    const bool jumped = ! laneRunning || std::abs (ppq - expectedPpq) > ppqPerSample + 1.0e-6;
+    const bool settingsChanged = settings != laneSettings;
+    laneSettings = settings;
+    const int now = snap.slotAt (inLoop (ppq + 1.0e-9), barQ);
+    if (jumped || now != laneCurrent || snap.chordIn (now).encode() != laneCode || settingsChanged)
+        changeTo (now, 0);
+
+    // Slot boundaries inside this block, each on its own sample
+    double t = ppq;
+    for (int guard = 0; guard < 64; ++guard)
+    {
+        const double posInLoop = inLoop (t + 1.0e-9);
+        const double boundary = (t + 1.0e-9 - posInLoop) + snap.nextBoundary (posInLoop, barQ);
+        if (boundary >= endPpq - 1.0e-12) break;
+        const int samplePos = juce::jlimit (0, numSamples - 1, (int) std::llround ((boundary - ppq) / ppqPerSample));
+        changeTo (snap.slotAt (inLoop (boundary + 1.0e-9), barQ), samplePos);
+        t = boundary;
+    }
+
+    expectedPpq = endPpq;
+    laneRunning = true;
+}
+
+void PotatoChordsProcessor::captureOutput (int numSamples)
+{
+    // With the transport running, events keep their song position; when stopped, a free-running clock at the
+    // last known tempo keeps the timing as played
+    const double quartersPerSample = blockBpm / 60.0 / sampleRate;
+    const double start = blockPlaying ? blockPpq : freeQuarters;
+    freeQuarters = start + numSamples * quartersPerSample;
+    if (! capturing.load (std::memory_order_relaxed)) return;
+
+    for (const auto meta : out)
+    {
+        const auto m = meta.getMessage();
+        if (! (m.isNoteOnOrOff())) continue;
+        const auto scope = captureFifo.write (1);
+        if (scope.blockSize1 == 0) return;  // full: the message thread is behind, drop rather than block
+        auto& e = captureEvents[(size_t) scope.startIndex1];
+        const auto* raw = m.getRawData();
+        e.quarters = start + meta.samplePosition * quartersPerSample;
+        e.status = raw[0];
+        e.data1 = raw[1];
+        e.data2 = raw[2];
+    }
+}
+
 void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
 {
     buffer.clear();
@@ -196,7 +322,7 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
         return;
     }
     previewWasOn = true;
-    synth.setSound ((pc::synth::Sound) (int) soundParam->load());
+    synth.setPreset ((int) soundParam->load());
 
     auto* left = buffer.getWritePointer (0);
     auto* right = buffer.getWritePointer (1);
@@ -229,11 +355,14 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
 void PotatoChordsProcessor::publishState()
 {
     activeDegree.store (source == Source::none ? -1 : currentDegree, std::memory_order_relaxed);
+    laneSlot.store (laneRunning ? laneCurrent : -1, std::memory_order_relaxed);
+    // The display shows the live chord if there is one, else the lane's chord
+    const auto& shown = playing.size > 0 ? playing : lanePlaying;
     uint64_t packed = ~uint64_t (0);
-    for (int i = 0; i < playing.size && i < pc::voicing::maxNotes; ++i)
+    for (int i = 0; i < shown.size && i < pc::voicing::maxNotes; ++i)
     {
         packed &= ~(uint64_t (0xff) << (8 * i));
-        packed |= uint64_t (playing.notes[(size_t) i]) << (8 * i);
+        packed |= uint64_t (shown.notes[(size_t) i]) << (8 * i);
     }
     activeNotes.store (packed, std::memory_order_relaxed);
     const auto bits = tracker.noteBits();
@@ -254,6 +383,8 @@ void PotatoChordsProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         playChord (currentDegree, chordVelocity, 0);
 
     handleMidi (midi, chordKeysParam->load() > 0.5f, true);
+    runLane (buffer.getNumSamples());
+    captureOutput (buffer.getNumSamples());
     renderPreview (buffer);
     midi.swapWith (out);
     publishState();
@@ -271,6 +402,9 @@ void PotatoChordsProcessor::processBlockBypassed (juce::AudioBuffer<float>& buff
         source = Source::none;
         currentDegree = -1;
     }
+    stopLaneChord (0);
+    laneRunning = false;
+    laneCurrent = -1;
     handleMidi (midi, false, false);
     midi.swapWith (out);
     buffer.clear();
@@ -287,6 +421,7 @@ void PotatoChordsProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.setProperty (versionProperty, stateVersion, nullptr);
+    state.setProperty (progressionProperty, juce::String (lane.snapshot().toString()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -299,6 +434,7 @@ void PotatoChordsProcessor::setStateInformation (const void* data, int sizeInByt
             auto state = juce::ValueTree::fromXml (*xml);
             // Migrations from older versions go here, keyed on state[versionProperty]
             state.setProperty (versionProperty, stateVersion, nullptr);
+            lane.set (pc::progression::Snapshot::fromString (state[progressionProperty].toString().toStdString()));
             apvts.replaceState (state);
             flushRequested = true;
         }

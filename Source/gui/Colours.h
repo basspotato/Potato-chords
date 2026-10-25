@@ -40,4 +40,5 @@ namespace pc::gui::colours
     inline const juce::Colour textDim     { 0xff9d96c8 };
     inline const juce::Colour accent      { 0xffFA3DC7 };  // hot pink from the palette, for selected controls
     inline const juce::Colour onNote      { 0xff15122b };  // text drawn on top of a note colour
+    inline const juce::Colour record      { 0xffFF4D6D };  // the Capture light
 }

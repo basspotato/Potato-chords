@@ -46,23 +46,24 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 - The gate is the Windows job: VST3 build plus pluginval at strictness 10, on every push and PR. A Linux job runs headless sequencer/theory tests. A macOS job, if added, is non-blocking.
 - Linux: `xvfb-run -a /tmp/pluginval/pluginval --strictness-level 10 --validate-in-process --validate build/PotatoChords_artefacts/Release/VST3/Potato-Chords.vst3`.
-- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width] [pad]` renders the editor to a PNG (width 0 = default; pad 1-7 holds a chord pad). Look at it after any GUI change.
+- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width] [pad]` renders the editor to a PNG (width 0 = default; then optional pad 1-7 to hold, and preset 1-8 to fill the lane). Look at it after any GUI change.
 - Tests: `xvfb-run -a build/PotatoChordsTests` (chord/scale theory, voicing, step timing against host transport, note-off on stop/loop/tempo change, state). Add a test with every sequencer change; never weaken one to pass.
 
 ## Source layout (planned; update as it's built)
 
-Built so far: Params, Theory, Voicing, MidiOut, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo.
+Built so far: Params, Theory, Voicing, Progression, Presets, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane. Lane playback lives in PluginProcessor (runLane) rather than a separate Sequencer.h.
 
 ```
 Source/
   Params.h            — every APVTS parameter ID, range and default (single source of truth)
   Theory.h            — scales, modes, chord construction, diatonic degrees
   Voicing.h           — inversions, spread, voice leading, range limits
-  Progression.h       — chord slots / progression model
+  Progression.h       — the 8-bar lane (16 half-bar slots), lock-free atomics, state text form
   Sequencer.h         — step/pattern playback synced to host PPQ (rhythm, length, gate, swing, strum)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
-  Presets.h           — factory progressions/patterns
-  PreviewSynth.h      — built-in 16-voice preview synth (Piano, Soft Piano, E-Piano, Pad, Pluck, Lead)
+  Presets.h           — factory progressions and next-chord hints
+  MidiExport.h        — Capture recorder and lane-to-MIDI-file export for drag and drop
+  PreviewSynth.h      — built-in 16-voice preview synth, 25 presets (5 each: Piano, E-Piano, Pad, Pluck, Lead)
   gui/Colours.h       — the note-colour table and interface colours (the only place colours live)
   gui/Controls.h      — own-look parameter controls (ChoiceStrip, Switch)
   gui/Look.h          — 3D drawing helpers (textured background, raised/inset surfaces, glow, LEDs) and LookAndFeel
@@ -70,6 +71,7 @@ Source/
   gui/Display.h       — glass now-playing display
   gui/Keyboard.h      — coloured keyboard that lights the sounding notes
   gui/PotatoLogo.h    — smiling potato emblem (from Potato-Kicker)
+  gui/ProgressionLane.h — the lane editor
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout

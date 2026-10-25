@@ -15,6 +15,12 @@ namespace pc::gui
 
         explicit ChordPad (int degreeIndex) : degree (degreeIndex) {}
 
+        // Marks the pad as a good next chord
+        void setHint (bool h)
+        {
+            if (h != hint) { hint = h; repaint(); }
+        }
+
         void setChord (const theory::Chord& c, bool useFlats, bool isActive)
         {
             const auto n = theory::chordName (c, useFlats);
@@ -43,6 +49,19 @@ namespace pc::gui
             if (active) r = r.translated (0.0f, 1.5f);
             g.setColour (active ? rootColour : rootColour.withAlpha (0.35f));
             g.drawRoundedRectangle (r.reduced (2.0f), 12.0f, active ? 2.0f : 1.0f);
+
+            if (hint && ! active)
+            {
+                g.setColour (colours::accent.withAlpha (0.8f));
+                g.drawRoundedRectangle (r.reduced (1.0f), 13.0f, 1.5f);
+                auto tag = juce::Rectangle<float> (40.0f, 16.0f).withCentre ({ r.getCentreX(), r.getY() + 1.0f });
+                look::glow (g, tag, 8.0f, colours::accent, 0.8f);
+                g.setColour (colours::accent);
+                g.fillRoundedRectangle (tag, 8.0f);
+                g.setColour (colours::text);
+                g.setFont (look::font (10.5f));
+                g.drawText ("NEXT", tag, juce::Justification::centred, false);
+            }
 
             auto inner = r.reduced (10.0f);
             look::led (g, { inner.getRight() - 4.0f, inner.getY() + 4.0f }, 3.5f, rootColour, active);
@@ -82,7 +101,7 @@ namespace pc::gui
     private:
         int degree;
         theory::Chord chord;
-        bool flats = false, active = false;
+        bool flats = false, active = false, hint = false;
         juce::String name, numeral;
     };
 }

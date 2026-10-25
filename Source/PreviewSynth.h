@@ -4,37 +4,66 @@
 #include <cstdint>
 
 // Small built-in synth, only for hearing chords without routing MIDI to another instrument.
-// 16 voices, 4 fixed sounds, no allocation after construction.
+// 16 voices, 25 fixed presets in 5 groups, no allocation after construction.
 namespace pc::synth
 {
-    enum class Sound { piano, softPiano, electricPiano, pad, pluck, lead };
-
     constexpr int numVoices = 16;
     constexpr float twoPi = 6.28318530718f;
 
-    struct SoundSettings
+    enum class Engine { additive, fm, subtractive };
+
+    struct Preset
     {
+        const char* name;
+        const char* group;
+        Engine engine;
         float attack, decay, sustain, release;  // seconds, level 0-1
-        float cutoff, cutoffEnv, filterDecay;   // Hz (0 = no filter), Hz added at the envelope peak, seconds
-                                            // (Electric Piano has no filter and uses the envelope as its FM depth)
-        float detuneCents;
-        int partials;                           // piano sounds: number of sine partials (0 = not additive)
-        float brightness;                       // piano sounds: how fast upper partials fall away (0-1)
+        float cutoff, cutoffEnv, envDecay;      // Hz (0 = no filter), Hz added at the envelope peak, seconds.
+                                                // The same envelope drives the FM depth.
+        float detuneCents, width;               // second oscillator / string detune, stereo width 0-1
+        float saw, square, sine;                // subtractive oscillator mix
+        float ratio, index;                     // FM modulator ratio and depth
+        int partials;                           // additive: number of sine partials
+        float brightness;                       // additive: how fast upper partials fall away (0-1)
+        float level;
     };
 
-    constexpr SoundSettings settingsFor (Sound s)
-    {
-        switch (s)
-        {
-            case Sound::piano:         return { 0.001f, 4.0f,  0.0f,  0.30f,  0.0f,    0.0f,    0.0f,  0.8f, 7, 0.60f };
-            case Sound::softPiano:     return { 0.006f, 3.0f,  0.0f,  0.50f,  0.0f,    0.0f,    0.0f,  0.5f, 4, 0.30f };
-            case Sound::electricPiano: return { 0.002f, 1.6f,  0.25f, 0.35f,  0.0f,    0.0f,    0.6f,  0.0f, 0, 0.0f };
-            case Sound::pad:           return { 0.35f,  1.5f,  0.80f, 1.20f,  1400.0f, 900.0f,  1.2f,  7.0f, 0, 0.0f };
-            case Sound::pluck:         return { 0.001f, 0.45f, 0.0f,  0.25f,  300.0f,  5000.0f, 0.18f, 0.0f, 0, 0.0f };
-            case Sound::lead:          return { 0.005f, 0.30f, 0.85f, 0.18f,  3500.0f, 1500.0f, 0.3f,  5.0f, 0, 0.0f };
-        }
-        return settingsFor (Sound::piano);
-    }
+    using E = Engine;
+    //                       name                group      engine          A       D      S      R      cutoff   env     envDec  det    width  saw   sq    sine  ratio  index  parts bright level
+    inline constexpr std::array<Preset, 25> presets {{
+        { "Grand Piano",      "Piano",   E::additive,    0.001f, 4.0f,  0.0f,  0.30f, 0.0f,    0.0f,   0.0f,  0.8f,  0.6f,  0, 0, 0, 0, 0,     7, 0.60f, 1.0f },
+        { "Soft Felt Piano",  "Piano",   E::additive,    0.006f, 3.0f,  0.0f,  0.50f, 0.0f,    0.0f,   0.0f,  0.5f,  0.5f,  0, 0, 0, 0, 0,     4, 0.30f, 1.1f },
+        { "Bright Upright",   "Piano",   E::additive,    0.001f, 3.0f,  0.0f,  0.25f, 0.0f,    0.0f,   0.0f,  2.5f,  0.7f,  0, 0, 0, 0, 0,     8, 0.75f, 0.9f },
+        { "Dark Concert",     "Piano",   E::additive,    0.002f, 5.0f,  0.0f,  0.60f, 0.0f,    0.0f,   0.0f,  0.6f,  0.6f,  0, 0, 0, 0, 0,     6, 0.42f, 1.0f },
+        { "Lo-fi Piano",      "Piano",   E::additive,    0.003f, 2.2f,  0.0f,  0.25f, 2200.0f, 0.0f,   0.0f,  6.0f,  0.4f,  0, 0, 0, 0, 0,     5, 0.50f, 1.1f },
+
+        { "Classic EP",       "E-Piano", E::fm,          0.002f, 1.6f,  0.25f, 0.35f, 0.0f,    0.0f,   0.6f,  0.0f,  0.0f,  0, 0, 0, 1.0f,  1.3f,  0, 0, 1.0f },
+        { "Soft Rhodes",      "E-Piano", E::fm,          0.004f, 2.0f,  0.30f, 0.45f, 0.0f,    0.0f,   0.8f,  3.0f,  0.5f,  0, 0, 0, 1.0f,  0.7f,  0, 0, 1.1f },
+        { "Bell EP",          "E-Piano", E::fm,          0.001f, 1.8f,  0.15f, 0.40f, 0.0f,    0.0f,   0.35f, 2.0f,  0.4f,  0, 0, 0, 7.0f,  0.8f,  0, 0, 0.9f },
+        { "Tine Keys",        "E-Piano", E::fm,          0.001f, 1.4f,  0.20f, 0.30f, 0.0f,    0.0f,   0.15f, 0.0f,  0.0f,  0, 0, 0, 14.0f, 1.0f,  0, 0, 0.9f },
+        { "Wurly",            "E-Piano", E::fm,          0.002f, 1.2f,  0.45f, 0.25f, 3500.0f, 0.0f,   0.4f,  0.0f,  0.0f,  0, 0, 0, 1.0f,  2.2f,  0, 0, 0.8f },
+
+        { "Warm Pad",         "Pad",     E::subtractive, 0.35f,  1.5f,  0.80f, 1.20f, 1400.0f, 900.0f, 1.2f,  7.0f,  0.7f,  1.0f, 0, 0, 0, 0, 0, 0, 0.7f },
+        { "Supersaw Pad",     "Pad",     E::subtractive, 0.25f,  2.0f,  0.85f, 1.00f, 3800.0f, 800.0f, 1.0f,  18.0f, 1.0f,  1.0f, 0, 0, 0, 0, 0, 0, 0.55f },
+        { "Dark Pad",         "Pad",     E::subtractive, 0.60f,  2.0f,  0.85f, 1.50f, 650.0f,  300.0f, 1.5f,  9.0f,  0.8f,  1.0f, 0.4f, 0, 0, 0, 0, 0, 0.9f },
+        { "Glass Pad",        "Pad",     E::subtractive, 0.80f,  2.5f,  0.70f, 1.80f, 2600.0f, 0.0f,   0.0f,  6.0f,  0.9f,  0.3f, 0.6f, 0.4f, 0, 0, 0, 0, 0.7f },
+        { "String Pad",       "Pad",     E::subtractive, 0.22f,  1.0f,  0.90f, 0.80f, 2100.0f, 500.0f, 0.6f,  11.0f, 0.8f,  1.0f, 0, 0, 0, 0, 0, 0, 0.65f },
+
+        { "Classic Pluck",    "Pluck",   E::subtractive, 0.001f, 0.45f, 0.0f,  0.25f, 300.0f,  5000.0f, 0.18f, 0.0f, 0.0f,  1.0f, 0, 0, 0, 0, 0, 0, 1.0f },
+        { "Bright Pluck",     "Pluck",   E::subtractive, 0.001f, 0.35f, 0.0f,  0.20f, 600.0f,  8000.0f, 0.12f, 5.0f, 0.5f,  1.0f, 0, 0, 0, 0, 0, 0, 0.85f },
+        { "Future Pluck",     "Pluck",   E::subtractive, 0.001f, 0.50f, 0.0f,  0.30f, 400.0f,  6000.0f, 0.22f, 16.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0.7f },
+        { "Soft Pluck",       "Pluck",   E::subtractive, 0.002f, 0.60f, 0.0f,  0.35f, 250.0f,  2200.0f, 0.25f, 0.0f, 0.0f,  0.0f, 0.7f, 0.5f, 0, 0, 0, 0, 1.0f },
+        { "Kalimba",          "Pluck",   E::fm,          0.001f, 0.70f, 0.0f,  0.30f, 0.0f,    0.0f,   0.08f, 0.0f,  0.0f,  0, 0, 0, 4.0f,  1.5f,  0, 0, 1.0f },
+
+        { "Saw Lead",         "Lead",    E::subtractive, 0.005f, 0.30f, 0.85f, 0.18f, 3500.0f, 1500.0f, 0.3f, 5.0f,  0.3f,  1.0f, 0, 0, 0, 0, 0, 0, 0.75f },
+        { "Square Lead",      "Lead",    E::subtractive, 0.005f, 0.30f, 0.85f, 0.18f, 2800.0f, 1200.0f, 0.3f, 3.0f,  0.2f,  0.0f, 1.0f, 0, 0, 0, 0, 0, 0.7f },
+        { "Bright Lead",      "Lead",    E::subtractive, 0.003f, 0.25f, 0.80f, 0.15f, 6000.0f, 2500.0f, 0.2f, 7.0f,  0.4f,  0.8f, 0.6f, 0, 0, 0, 0, 0, 0.6f },
+        { "Soft Sine Lead",   "Lead",    E::subtractive, 0.010f, 0.40f, 0.90f, 0.25f, 1800.0f, 400.0f, 0.4f,  2.0f,  0.2f,  0.2f, 0, 1.0f, 0, 0, 0, 0, 1.1f },
+        { "Supersaw Lead",    "Lead",    E::subtractive, 0.004f, 0.30f, 0.85f, 0.20f, 5000.0f, 2000.0f, 0.3f, 20.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0.5f },
+    }};
+
+    constexpr int numPresets = (int) presets.size();
+    constexpr int presetsPerGroup = 5;
 
     namespace detail
     {
@@ -112,35 +141,38 @@ namespace pc::synth
 
         enum class Stage { idle, attack, decay, sustain, release };
 
-        void start (int ch, int midiNote, float velocity, Sound s, float sampleRate, uint32_t order)
+        void start (int ch, int midiNote, float velocity, const Preset& p, float sampleRate, uint32_t order)
         {
             channel = ch;
             note = midiNote;
-            sound = s;
-            set = settingsFor (s);
+            set = &p;
             sr = sampleRate;
             startOrder = order;
-            gain = 0.16f * (0.3f + 0.7f * velocity);
+            gain = 0.16f * p.level * (0.3f + 0.7f * velocity);
             const float hz = 440.0f * std::pow (2.0f, (float) (midiNote - 69) / 12.0f);
-            const float detune = std::pow (2.0f, set.detuneCents / 1200.0f);
+            const float detune = std::pow (2.0f, p.detuneCents / 1200.0f);
             inc1 = hz / sr * detune;
             inc2 = hz / sr / detune;
             phase1 = 0.0f;
             phase2 = 0.37f;
+            phaseMod = 0.0f;
             level = 0.0f;
-            filterEnv = 1.0f;
-            filterCoef = set.filterDecay > 0.0f ? std::exp (-1.0f / (set.filterDecay * 0.25f * sr)) : 0.0f;
-            attackStep = 1.0f / std::fmax (1.0f, set.attack * sr);
-            decayCoef = std::exp (-1.0f / (set.decay * 0.25f * sr));
-            releaseCoef = std::exp (-1.0f / (set.release * 0.25f * sr));
-            // Piano: sine partials with slight string stiffness (stretched overtones). Harder notes are
-            // brighter, and upper partials die away faster, like a real string.
-            const float bright = set.brightness * (0.6f + 0.6f * velocity);
+            env = 1.0f;
+            envCoef = p.envDecay > 0.0f ? std::exp (-1.0f / (p.envDecay * 0.25f * sr)) : 1.0f;
+            attackStep = 1.0f / std::fmax (1.0f, p.attack * sr);
+            decayCoef = std::exp (-1.0f / (p.decay * 0.25f * sr));
+            releaseCoef = std::exp (-1.0f / (p.release * 0.25f * sr));
+            cross = 1.0f - 0.5f * p.width;
+
+            // Additive piano: sine partials with slight string stiffness (stretched overtones). Harder notes
+            // are brighter, and upper partials die away faster, like a real string.
+            const float bright = p.brightness * (0.6f + 0.6f * velocity);
             for (int k = 0; k < maxPartials; ++k)
             {
                 const float n = (float) (k + 1);
-                partialInc[(size_t) k] = k < set.partials ? hz * n * std::sqrt (1.0f + 0.0004f * n * n) / sr : 0.0f;
-                partialAmp[(size_t) k] = k < set.partials && partialInc[(size_t) k] < 0.45f ? std::pow (bright, n - 1.0f) / n : 0.0f;
+                const bool used = p.engine == Engine::additive && k < p.partials;
+                partialInc[(size_t) k] = used ? hz * n * std::sqrt (1.0f + 0.0004f * n * n) / sr : 0.0f;
+                partialAmp[(size_t) k] = used && partialInc[(size_t) k] < 0.45f ? std::pow (bright, n - 1.0f) / n : 0.0f;
                 partialCoef[(size_t) k] = std::exp (-(0.4f + 0.8f * n) / sr);
                 partialPhase[(size_t) k] = 0.0f;
             }
@@ -161,23 +193,23 @@ namespace pc::synth
 
         void render (float* left, float* right, int num)
         {
+            const auto& p = *set;
             for (int i = 0; i < num && stage != Stage::idle; ++i)
             {
-                if ((counter++ & 15) == 0 && set.cutoff > 0.0f)
+                if ((counter++ & 15) == 0 && p.cutoff > 0.0f)
                 {
-                    const float fc = set.cutoff + set.cutoffEnv * filterEnv;
+                    const float fc = p.cutoff + p.cutoffEnv * env;
                     filterL.setCutoff (fc, sr);
                     filterR.setCutoff (fc, sr);
                 }
 
                 float l = 0.0f, r = 0.0f;
-                switch (sound)
+                switch (p.engine)
                 {
-                    case Sound::piano:
-                    case Sound::softPiano:
+                    case Engine::additive:
                     {
                         float sum = 0.0f;
-                        for (int k = 0; k < set.partials; ++k)
+                        for (int k = 0; k < p.partials; ++k)
                         {
                             sum += partialAmp[(size_t) k] * detail::sine (partialPhase[(size_t) k]);
                             partialPhase[(size_t) k] += partialInc[(size_t) k];
@@ -185,36 +217,41 @@ namespace pc::synth
                             partialAmp[(size_t) k] *= partialCoef[(size_t) k];
                         }
                         // A second, slightly detuned string on the fundamental gives the stereo shimmer
-                        const float second = 0.35f * partialAmp[0] * detail::sine (phase2);
+                        const float second = 0.35f * p.width * partialAmp[0] * detail::sine (phase2);
                         l = sum + second;
                         r = sum - second;
                         break;
                     }
-                    case Sound::electricPiano:
+                    case Engine::fm:
                     {
-                        // Two-operator FM with a decaying index: a soft electric-piano tone
-                        const float index = 1.3f * filterEnv;
-                        l = r = detail::sine (phase1 + index * detail::sine (phase1));
+                        // Two operators with a decaying index; the detuned copy spreads it in stereo
+                        const float index = p.index * env;
+                        const float a = detail::sine (phase1 + index * detail::sine (phaseMod));
+                        const float b = p.width > 0.0f ? detail::sine (phase2 + index * detail::sine (phaseMod)) : a;
+                        l = a + (b - a) * 0.5f * p.width;
+                        r = b + (a - b) * 0.5f * p.width;
                         break;
                     }
-                    case Sound::pad:
+                    case Engine::subtractive:
                     {
-                        const float a = detail::saw (phase1, inc1), b = detail::saw (phase2, inc2);
-                        l = filterL.process (a + 0.5f * b) * 0.7f;
-                        r = filterR.process (b + 0.5f * a) * 0.7f;
+                        const float a = p.saw * detail::saw (phase1, inc1) + p.square * detail::square (phase1, inc1) + p.sine * detail::sine (phase1);
+                        const float b = p.saw * detail::saw (phase2, inc2) + p.square * detail::square (phase2, inc2) + p.sine * detail::sine (phase2);
+                        l = (a + cross * b) * 0.6f;
+                        r = (b + cross * a) * 0.6f;
                         break;
                     }
-                    case Sound::pluck:
-                        l = r = filterL.process (detail::saw (phase1, inc1));
-                        break;
-                    case Sound::lead:
-                        l = r = filterL.process (0.6f * detail::square (phase1, inc1) + 0.5f * detail::saw (phase2, inc2)) * 0.8f;
-                        break;
+                }
+
+                if (p.cutoff > 0.0f)
+                {
+                    l = filterL.process (l);
+                    r = filterR.process (r);
                 }
 
                 phase1 += inc1; if (phase1 >= 1.0f) phase1 -= 1.0f;
                 phase2 += inc2; if (phase2 >= 1.0f) phase2 -= 1.0f;
-                filterEnv *= filterCoef;
+                phaseMod += inc1 * p.ratio; phaseMod -= std::floor (phaseMod);
+                env *= envCoef;
 
                 stepEnvelope();
                 const float g = gain * level;
@@ -235,9 +272,9 @@ namespace pc::synth
                     if (level >= 1.0f) { level = 1.0f; stage = Stage::decay; }
                     break;
                 case Stage::decay:
-                    level = set.sustain + (level - set.sustain) * decayCoef;
-                    if (level - set.sustain < 1.0e-4f)
-                        stage = set.sustain > 0.0f ? Stage::sustain : Stage::idle;
+                    level = set->sustain + (level - set->sustain) * decayCoef;
+                    if (level - set->sustain < 1.0e-4f)
+                        stage = set->sustain > 0.0f ? Stage::sustain : Stage::idle;
                     break;
                 case Stage::sustain:
                     break;
@@ -251,11 +288,10 @@ namespace pc::synth
         }
 
         Stage stage = Stage::idle;
-        Sound sound = Sound::piano;
-        SoundSettings set = settingsFor (Sound::piano);
-        float sr = 48000.0f, gain = 0.0f, level = 0.0f;
-        float phase1 = 0.0f, phase2 = 0.0f, inc1 = 0.0f, inc2 = 0.0f;
-        float filterEnv = 0.0f, filterCoef = 0.0f;
+        const Preset* set = &presets[0];
+        float sr = 48000.0f, gain = 0.0f, level = 0.0f, cross = 1.0f;
+        float phase1 = 0.0f, phase2 = 0.0f, phaseMod = 0.0f, inc1 = 0.0f, inc2 = 0.0f;
+        float env = 0.0f, envCoef = 0.0f;
         float attackStep = 0.0f, decayCoef = 0.0f, releaseCoef = 0.0f;
         uint32_t startOrder = 0, counter = 0;
         std::array<float, maxPartials> partialPhase {}, partialInc {}, partialAmp {}, partialCoef {};
@@ -268,13 +304,13 @@ namespace pc::synth
         PreviewSynth() { detail::sineTable(); }  // build the table off the audio thread
 
         void prepare (double sampleRate) { sr = (float) sampleRate; killAll(); }
-        void setSound (Sound s) { sound = s; }
+        void setPreset (int index) { preset = index >= 0 && index < numPresets ? index : 0; }
 
         void noteOn (int channel, int note, float velocity)
         {
             for (auto& v : voices)
                 if (v.plays (channel, note)) v.release();
-            voiceFor().start (channel, note, velocity, sound, sr, ++order);
+            voiceFor().start (channel, note, velocity, presets[(size_t) preset], sr, ++order);
         }
 
         void noteOff (int channel, int note)
@@ -317,7 +353,7 @@ namespace pc::synth
         }
 
         std::array<Voice, numVoices> voices;
-        Sound sound = Sound::piano;
+        int preset = 0;
         float sr = 48000.0f;
         uint32_t order = 0;
     };

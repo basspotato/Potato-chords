@@ -10,17 +10,17 @@ namespace pc::gui
     {
     public:
         void update (const juce::String& nameIn, const juce::String& numeralIn, int rootIn, const voicing::Voiced& notesIn,
-                     bool flatsIn, bool chordKeysOn)
+                     bool flatsIn, const juce::String& idleIn)
         {
             if (nameIn == name && numeralIn == numeral && rootIn == root && notesIn.size == notes.size
-                && notesIn.notes == notes.notes && flatsIn == flats && chordKeysOn == chordKeys)
+                && notesIn.notes == notes.notes && flatsIn == flats && idleIn == idle)
                 return;
             name = nameIn;
             numeral = numeralIn;
             root = rootIn;
             notes = notesIn;
             flats = flatsIn;
-            chordKeys = chordKeysOn;
+            idle = idleIn;
             repaint();
         }
 
@@ -45,9 +45,7 @@ namespace pc::gui
             if (name.isEmpty())
             {
                 g.setFont (look::font (15.0f, false));
-                look::glowText (g, chordKeys ? "Chord keys on: the white keys C3 to B3 play I to vii. Or tap a pad."
-                                             : "Tap a pad to hear its chord.",
-                                inner, colours::textDim, juce::Justification::centredLeft);
+                look::glowText (g, idle, inner, colours::textDim, juce::Justification::centredLeft);
                 return;
             }
 
@@ -76,6 +74,7 @@ namespace pc::gui
         juce::String name, numeral;
         int root = 0;
         voicing::Voiced notes;
-        bool flats = false, chordKeys = false;
+        bool flats = false;
+        juce::String idle;
     };
 }

@@ -4,6 +4,7 @@
 #include "Theory.h"
 #include "Voicing.h"
 #include "PreviewSynth.h"
+#include "Presets.h"
 #include <cstring>
 #include <map>
 #include <iostream>
@@ -145,13 +146,12 @@ void voicingTests()
 
 void synthTests()
 {
-    using pc::synth::Sound;
-    bool allSound = true, allFinite = true, allStop = true;
-    for (auto s : { Sound::piano, Sound::softPiano, Sound::electricPiano, Sound::pad, Sound::pluck, Sound::lead })
+    bool allSound = true, allFinite = true, allStop = true, notTooLoud = true;
+    for (int s = 0; s < pc::synth::numPresets; ++s)
     {
         pc::synth::PreviewSynth synth;
         synth.prepare (sampleRate);
-        synth.setSound (s);
+        synth.setPreset (s);
         for (int n : { 48, 60, 64, 67, 71, 74, 96 })
             synth.noteOn (1, n, 0.8f);
         std::vector<float> l (4800), r (4800);
@@ -168,12 +168,16 @@ void synthTests()
             }
         }
         allSound = allSound && peak > 0.01f;
+        notTooLoud = notTooLoud && peak < 1.5f;
+        if (peak <= 0.01f || peak >= 1.5f) std::cerr << "  preset " << pc::synth::presets[(size_t) s].name << " peak " << peak << "\n";
         synth.releaseAll();
         for (int b = 0; b < 100; ++b)  // 10 s
             synth.render (l.data(), r.data(), (int) l.size());
         allStop = allStop && synth.numActive() == 0;
     }
-    CHECK (allSound, "every preview sound makes sound");
+    CHECK (allSound, "every preview preset makes sound");
+    CHECK (notTooLoud, "no preview preset is far louder than the rest (7-note chord peak under 1.5)");
+    CHECK (pc::params::soundNames.size() == pc::synth::numPresets && pc::synth::numPresets == 25, "25 sound presets, all named in the parameter");
     CHECK (allFinite, "preview output is always finite");
     CHECK (allStop, "every preview sound goes quiet after release");
 
@@ -379,6 +383,242 @@ void padTests()
     CHECK (held.sounding() == 0, "all-notes-off from the host releases the chord");
 }
 
+struct TestPlayHead : juce::AudioPlayHead
+{
+    double ppq = 0.0, bpm = 120.0;
+    bool playing = true;
+    int numerator = 4, denominator = 4;
+
+    juce::Optional<PositionInfo> getPosition() const override
+    {
+        PositionInfo info;
+        info.setIsPlaying (playing);
+        info.setPpqPosition (ppq);
+        info.setBpm (bpm);
+        info.setTimeSignature (juce::AudioPlayHead::TimeSignature { numerator, denominator });
+        return info;
+    }
+
+    void advance (int samples) { ppq += samples * bpm / 60.0 / sampleRate; }
+};
+
+// Note-on sample positions (absolute, from `startSample`) and pitches over a run of blocks
+struct Timeline
+{
+    std::vector<std::pair<long, int>> ons, offs;
+};
+
+void laneModelTests()
+{
+    using pc::progression::Slot;
+    using pc::progression::Snapshot;
+
+    Snapshot s;
+    s.slots[0] = Slot { 0, Flavour::triad, false }.encode();
+    s.slots[2] = Slot { 4, Flavour::seventh, false }.encode();
+    s.slots[3] = Slot { 5, Flavour::sus4, false }.encode();
+    s.splits = 0b10;  // bar 1 is split
+    CHECK (s.slotAt (0.0, 4.0) == 0 && s.slotAt (3.99, 4.0) == 0, "bar 0 is one slot");
+    CHECK (s.slotAt (4.0, 4.0) == 2 && s.slotAt (6.0, 4.0) == 3, "split bar 1 has two halves");
+    CHECK (s.nextBoundary (0.5, 4.0) == 4.0 && s.nextBoundary (4.0, 4.0) == 6.0 && s.nextBoundary (6.0, 4.0) == 8.0, "slot boundaries");
+    CHECK (s.chordIn (1) == s.slot (0), "an unsplit bar's second half plays the bar's chord");
+
+    const auto restored = Snapshot::fromString (s.toString());
+    CHECK (restored.slots == s.slots && restored.splits == s.splits, "lane round-trips through its text form");
+    CHECK ((Snapshot::fromString ("zz qq | q").slots == Snapshot {}.slots), "non-hex lane text loads as empty");
+    CHECK (Snapshot::fromString ("7f 0e").slot (0).empty() && Snapshot::fromString ("7f 0e").slot (1).empty(), "bytes without the valid bit load as empty");
+
+    const auto filled = pc::presets::fill (pc::presets::progressions[7], Flavour::triad);
+    CHECK (filled.slot (0).degree == 0 && filled.slot (6).degree == 4 && filled.slot (6).majorFive && filled.slot (14).majorFive,
+           "preset i-iv-VI-V fills 8 bars with the major V");
+    CHECK ((pc::presets::nextChordHints (Scale::major, 4) & 1) != 0, "after V, I is suggested");
+    CHECK ((pc::presets::nextChordHints (Scale::minor, 0) & (1 << 5)) != 0, "after i, VI is suggested");
+}
+
+// Plays `blocks` blocks against the play head, collecting chord note-ons and note-offs
+Timeline runTransport (PotatoChordsProcessor& proc, TestPlayHead& head, int blocks, Held& held, long& sampleClock)
+{
+    Timeline t;
+    for (int b = 0; b < blocks; ++b)
+    {
+        auto out = runBlock (proc, {});
+        held.add (out);
+        for (const auto meta : out)
+        {
+            const auto m = meta.getMessage();
+            if (m.isNoteOn())  t.ons.push_back ({ sampleClock + meta.samplePosition, m.getNoteNumber() });
+            if (m.isNoteOff()) t.offs.push_back ({ sampleClock + meta.samplePosition, m.getNoteNumber() });
+        }
+        if (head.playing) head.advance (blockSize);
+        sampleClock += blockSize;
+    }
+    return t;
+}
+
+void laneTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    TestPlayHead head;
+    head.ppq = 0.0;
+    proc->setPlayHead (&head);
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));  // I V vi IV
+    Held held;
+    long clock = 0;
+
+    // 120 BPM, 4/4: a bar is 2 s = 96000 samples, not a multiple of the 256-sample block
+    const long barSamples = 96000;
+    const auto t = runTransport (*proc, head, (int) (barSamples * 2 / blockSize) + 4, held, clock);
+    long secondBar = -1;
+    for (auto& [pos, note] : t.ons)
+        if (pos > 0 && secondBar < 0) secondBar = pos;
+    CHECK (! t.ons.empty() && t.ons.front().first == 0, "the lane's first chord starts on sample 0 of the song");
+    CHECK (secondBar == barSamples, "the second chord lands on the exact sample of bar 2 (not a block boundary)");
+    CHECK (proc->playingSlot() == 4, "GUI sees the lane playing bar 3");
+    CHECK (held.sounding() == 3, "one triad sounding while the lane plays");
+
+    // Transport stop: every lane note goes off
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 0 && proc->playingSlot() == -1, "transport stop sends note-offs");
+
+    // Restart mid-bar after a locate: the bar's chord starts at once
+    head.playing = true;
+    head.ppq = 4.0 * 5 + 1.0;  // bar 6, beat 2: chord V (preset repeats: I V vi IV I V vi IV)
+    auto r = runTransport (*proc, head, 1, held, clock);
+    Notes pcs;
+    for (auto& [pos, note] : r.ons) pcs.push_back (note % 12);
+    std::sort (pcs.begin(), pcs.end());
+    CHECK ((pcs == Notes { 2, 7, 11 }), "locate into bar 6 plays its chord (G) straight away");
+
+    // Host loop: jump back to bar 1 retriggers cleanly
+    head.ppq = 0.0;
+    r = runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 3 && held.doubledOns == 0, "loop jump back: old chord off, new chord on, nothing doubled");
+
+    // The lane loops by itself every 8 bars
+    head.ppq = 32.0 - 0.01;
+    held.add (runBlock (*proc, {}));
+    head.advance (blockSize);
+    CHECK (proc->playingSlot() == 0, "after bar 8 the lane wraps to bar 1");
+
+    // Tempo change keeps the timing on the new grid
+    head.ppq = 3.5;
+    head.bpm = 150.0;
+    runTransport (*proc, head, 1, held, clock);  // a jump in tempo still lands on the current bar
+    const long beforeBar2 = clock;
+    const auto tempo = runTransport (*proc, head, (int) (48000 * 0.2 / blockSize) + 2, held, clock);
+    // 0.5 quarter - one block of 256 at 150 BPM is left until bar 2
+    const double expected = (4.0 - 3.5 - 256 * 150.0 / 60.0 / sampleRate) / (150.0 / 60.0 / sampleRate);
+    bool onTime = false;
+    for (auto& [pos, note] : tempo.ons)
+        onTime = onTime || std::abs ((double) (pos - beforeBar2) - expected) <= 1.0;
+    CHECK (onTime, "after a tempo change, the next bar lands on its exact sample");
+
+    // Split bar and 3/4 time
+    auto snap = proc->lane.snapshot();
+    snap.splits = 0b1;
+    snap.slots[1] = pc::progression::Slot { 3, Flavour::triad, false }.encode();
+    proc->lane.set (snap);
+    head.bpm = 120.0;
+    head.numerator = 3;
+    head.ppq = 0.0;
+    clock = 0;
+    runTransport (*proc, head, 1, held, clock);
+    const auto split = runTransport (*proc, head, 200, held, clock);
+    bool halfBar = false;
+    for (auto& [pos, note] : split.ons)
+        halfBar = halfBar || pos == 36000;  // 1.5 quarters at 120 BPM
+    CHECK (halfBar, "a split bar in 3/4 changes chord exactly half way through the bar");
+
+    // Editing the playing slot changes the chord without a stuck note
+    proc->lane.setSlot (0, pc::progression::Slot { 5, Flavour::seventh, false });
+    head.ppq = 0.0;
+    runTransport (*proc, head, 2, held, clock);
+    CHECK (held.sounding() == 4, "editing the playing slot swaps in the new chord");
+
+    // Empty slot: silence
+    proc->lane.clear();
+    runTransport (*proc, head, 2, held, clock);
+    CHECK (held.sounding() == 0, "an empty lane sends note-offs and stays silent");
+
+    // Play progression off
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));
+    setParam (*proc, pc::params::playLane, 0.0f);
+    runTransport (*proc, head, 2, held, clock);
+    CHECK (held.sounding() == 0, "Play progression off: the lane is silent");
+
+    // State: the lane is saved and restored
+    juce::MemoryBlock state;
+    proc->getStateInformation (state);
+    auto other = makeProcessor();
+    other->setStateInformation (state.getData(), (int) state.getSize());
+    CHECK (other->lane.snapshot().slots == proc->lane.snapshot().slots, "state restores the progression lane");
+    CHECK (held.doubledOns == 0 && held.strayOffs == 0, "lane: no doubled note-ons or stray note-offs");
+    proc->setPlayHead (nullptr);
+}
+
+int countNoteOns (const juce::MidiFile& f, std::vector<double>* times = nullptr)
+{
+    int n = 0;
+    for (int t = 0; t < f.getNumTracks(); ++t)
+        for (auto* e : *f.getTrack (t))
+            if (e->message.isNoteOn())
+            {
+                ++n;
+                if (times != nullptr) times->push_back (e->message.getTimeStamp());
+            }
+    return n;
+}
+
+void exportTests()
+{
+    using namespace pc::midiexport;
+    const auto lane = pc::presets::fill (pc::presets::progressions[0], Flavour::triad);
+    std::vector<double> times;
+    const auto file = laneToMidi (lane, 0, Scale::major, pc::voicing::Spread::close, 120.0, 4.0);
+    CHECK (countNoteOns (file, &times) == 24, "lane export: 8 triads = 24 notes");
+    std::sort (times.begin(), times.end());
+    CHECK (times.front() == 0.0 && std::count (times.begin(), times.end(), 4.0 * ticksPerQuarter) == 3, "lane export: bar 2 starts on tick 3840");
+
+    Recorder take;
+    take.add ({ 9.5, 0x90, 60, 100 });   // bar 3 (beat 2.5) in 4/4
+    take.add ({ 10.5, 0x80, 60, 0 });
+    take.add ({ 10.0, 0x90, 64, 100 });  // never released
+    take.add ({ 11.0, 0x80, 67, 0 });    // off without an on: dropped
+    std::vector<double> takeTimes;
+    const auto takeFile = take.toMidiFile (120.0, 4.0);
+    CHECK (countNoteOns (takeFile, &takeTimes) == 2 && take.numNotes() == 2, "capture: two notes in the take");
+    std::sort (takeTimes.begin(), takeTimes.end());
+    CHECK (takeTimes.front() == 1.5 * ticksPerQuarter, "capture: the take starts at its bar, keeping the note's place in the bar");
+    int offs = 0;
+    for (auto* e : *takeFile.getTrack (0)) offs += e->message.isNoteOff() ? 1 : 0;
+    CHECK (offs == 2, "capture: a note still held at the end gets a note-off");
+
+    // The processor hands captured chord notes to the message thread
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::chordKeys, 1.0f);
+    proc->setCapturing (true);
+    juce::MidiBuffer in;
+    in.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 90), 10);
+    runBlock (*proc, in);
+    in.clear();
+    in.addEvent (juce::MidiMessage::noteOff (1, 60), 20);
+    runBlock (*proc, in);
+    Recorder live;
+    proc->drainCapture ([&] (const CaptureEvent& e) { live.add (e); });
+    Notes captured;
+    const auto liveFile = live.toMidiFile (120.0, 4.0);
+    for (auto* e : *liveFile.getTrack (0))
+        if (e->message.isNoteOn()) captured.push_back (e->message.getNoteNumber());
+    std::sort (captured.begin(), captured.end());
+    CHECK ((captured == Notes { 60, 64, 67 }), "capture records the 3 chord notes one key played in Chord keys mode");
+    proc->setCapturing (false);
+}
+
 void processorTests()
 {
     std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
@@ -428,6 +668,9 @@ int main()
     synthTests();
     chordPlaybackTests();
     padTests();
+    laneModelTests();
+    laneTests();
+    exportTests();
     processorTests();
     std::cout << (failures == 0 ? "All tests passed\n" : "Tests failed\n");
     return failures == 0 ? 0 : 1;
