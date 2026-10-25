@@ -120,6 +120,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
 
     dragLane.makeFile = [this] { return laneFile(); };
     exportMidi.onClick = [this] { exportLane(); };
+    panic.onClick = [this] { proc.panic(); };
     dragTake.makeFile = [this]
     {
         return pc::midiexport::writeTemp (take.toMidiFile (proc.hostBpm(), proc.barQuarters()), "Potato-Chords capture");
@@ -137,7 +138,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -467,4 +468,5 @@ void PotatoChordsEditor::resized()
     display.setBounds (row);
 
     keyboard.setBounds (margin, keyboardY, right - margin, keyboardH);
+    panic.setBounds (right - 128, keyboardY + 3, 120, 26);
 }

@@ -36,7 +36,7 @@ private:
     juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, soundAttachment, rhythmAttachment, melodySoundAttachment;
     pc::gui::ChoiceStrip scale, flavour, spread;
     pc::gui::Switch chordKeys, preview, majorFive, playLane, learn;
-    pc::gui::ActionButton clearLane { "Clear" }, clearMelody { "Clear" }, exportMidi { "Export .mid" };
+    pc::gui::ActionButton clearLane { "Clear" }, clearMelody { "Clear" }, exportMidi { "Export .mid" }, panic { "All notes off" };
     std::unique_ptr<juce::FileChooser> chooser;
     pc::gui::DragChip dragLane { "Drag lane" }, dragTake { "Drag take" }, dragMelody { "Drag melody" };
     pc::gui::LedToggle capture { "Capture", pc::gui::colours::record };

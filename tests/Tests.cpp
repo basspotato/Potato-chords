@@ -297,6 +297,28 @@ void chordPlaybackTests()
     held.add (runBlock (*proc, in));
     CHECK (held.sounding() == 0 && held.strayOffs == 0, "pass-through note-off goes out, ignored key's doesn't");
 
+    // The same note arriving twice (two MIDI inputs) is released by its two note-offs
+    setParam (*proc, pc::params::chordKeys, 0.0f);
+    in.clear();
+    in.addEvent (juce::MidiMessage::noteOn (1, 50, (juce::uint8) 90), 0);
+    in.addEvent (juce::MidiMessage::noteOn (1, 50, (juce::uint8) 90), 5);
+    held.add (runBlock (*proc, in));
+    in.clear();
+    in.addEvent (juce::MidiMessage::noteOff (1, 50), 0);
+    in.addEvent (juce::MidiMessage::noteOff (1, 50), 5);
+    held.add (runBlock (*proc, in));
+    CHECK (held.sounding() == 0 && ! proc->isNoteSounding (50), "a doubled pass-through note never sticks");
+    held.doubledOns = 0;  // the doubled input itself is expected to show as a retrigger
+    setParam (*proc, pc::params::chordKeys, 1.0f);
+
+    // Panic releases everything
+    in.clear();
+    in.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 90), 0);
+    held.add (runBlock (*proc, in));
+    proc->panic();
+    held.add (runBlock (*proc, {}));
+    CHECK (held.sounding() == 0 && proc->heldDegree() == -1, "panic sends note-offs for everything");
+
     // A minor: C key plays the I chord of the key (Am); major V switch makes G play E major
     setParam (*proc, pc::params::key, 9.0f);
     setParam (*proc, pc::params::scale, 1.0f);

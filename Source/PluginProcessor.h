@@ -48,6 +48,9 @@ public:
     void padDown (int degree) { pushPadEvent (degree + 1); }
     void padUp (int degree)   { pushPadEvent (-(degree + 1)); }
 
+    // All notes off at the start of the next block (any thread)
+    void panic() { flushRequested = true; }
+
     // What is sounding now, for the GUI: the held degree (-1 = none) and the chord's MIDI notes
     int heldDegree() const { return activeDegree.load (std::memory_order_relaxed); }
     pc::voicing::Voiced soundingNotes() const;
@@ -141,7 +144,7 @@ private:
     juce::uint8 chordVelocity = 100;
     Settings chordSettings;
     pc::voicing::Voiced previousClose, playing;
-    std::array<std::array<bool, 128>, 16> passHeld {};
+    std::array<std::array<juce::uint8, 128>, 16> passHeld {};  // note-ons passed through and not yet released
     bool previewWasOn = true;
 
     // Progression lane playback

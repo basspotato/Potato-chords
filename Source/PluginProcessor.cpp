@@ -124,7 +124,7 @@ void PotatoChordsProcessor::flushAll (int samplePos)
     melodyNote = -1;
     source = Source::none;
     currentDegree = -1;
-    for (auto& ch : passHeld) ch.fill (false);
+    for (auto& ch : passHeld) ch.fill (0);
 }
 
 void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKeysOn, bool padsOn)
@@ -172,7 +172,8 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
                 continue;  // black keys in the chord octave do nothing
             }
             tracker.noteOn (out, ch, note, msg.getVelocity(), pos);
-            passHeld[(size_t) ch - 1][(size_t) note] = true;
+            auto& count = passHeld[(size_t) ch - 1][(size_t) note];
+            if (count < 255) ++count;
         }
         else if (msg.isNoteOff())
         {
@@ -184,10 +185,10 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
                 source = Source::none;
                 currentDegree = -1;
             }
-            else if (passHeld[(size_t) ch - 1][(size_t) note])
+            else if (auto& count = passHeld[(size_t) ch - 1][(size_t) note]; count > 0)
             {
                 tracker.noteOff (out, ch, note, pos);
-                passHeld[(size_t) ch - 1][(size_t) note] = false;
+                --count;
             }
         }
         else if (msg.isAllNotesOff() || msg.isAllSoundOff())
