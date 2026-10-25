@@ -737,6 +737,19 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void exportVelocityTests()
+{
+    pc::melody::Lane tune;
+    tune.addNote (0, 2, 0);
+    const auto m = pc::midiexport::melodyToMidi (tune.snapshot(), 0, Scale::major, 120.0, 4.0, 2, 0.0, 0, 77);
+    const auto l = pc::midiexport::laneToMidi (pc::presets::fill (pc::presets::progressions[0], Flavour::triad), 0, Scale::major,
+                                               pc::voicing::Spread::close, 120.0, 4.0, 0, 1, 0.0, 0, 0.0, 77);
+    bool melodyOk = false, laneOk = true;
+    for (auto* e : *m.getTrack (0)) if (e->message.isNoteOn()) melodyOk = e->message.getVelocity() == 77;
+    for (auto* e : *l.getTrack (0)) if (e->message.isNoteOn()) laneOk = laneOk && e->message.getVelocity() == 77;
+    CHECK (melodyOk && laneOk, "exported lane and melody use the Velocity setting");
+}
+
 void melodyOctaveTests()
 {
     CHECK (pc::melody::rowToNote (0, 0, Scale::major, -1) == pc::melody::rowToNote (0, 0, Scale::major) - 12, "melody octave -1 is 12 semitones down");
@@ -1096,6 +1109,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    exportVelocityTests();
     melodyOctaveTests();
     repeatTests();
     swingTests();

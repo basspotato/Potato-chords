@@ -98,7 +98,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
                                                                         (pc::theory::Scale) value (pc::params::scale),
                                                                         proc.hostBpm(), proc.barQuarters(), pc::midiexport::melodyChannelDefault,
                                                                         proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load(),
-                                                                        value (pc::params::melodyOctave) - 1),
+                                                                        value (pc::params::melodyOctave) - 1, value (pc::params::velocity)),
                                           "Potato-Chords melody");
     };
 
@@ -265,7 +265,7 @@ juce::File PotatoChordsEditor::laneFile()
                                     value (pc::params::rhythm), PotatoChordsProcessor::chordChannel,
                                     proc.apvts.getRawParameterValue (pc::params::strum.getParamID())->load() * pc::params::strumMaxSeconds,
                                     (int) proc.apvts.getRawParameterValue (pc::params::octave.getParamID())->load() - 2,
-                                    proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load()),
+                                    proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load(), value (pc::params::velocity)),
         "Potato-Chords progression");
 }
 
