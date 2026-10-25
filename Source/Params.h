@@ -18,6 +18,8 @@ namespace pc::params
     inline const juce::ParameterID rhythm    { "laneRhythm", 1 };
     inline const juce::ParameterID learn     { "learn", 1 };
     inline const juce::ParameterID melodySound { "melodySound", 1 };
+    inline const juce::ParameterID chorus    { "chorus", 1 };
+    inline const juce::ParameterID reverb    { "reverb", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -53,6 +55,9 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
+        // Effects on the preview sound only, 0-1
+        layout.add (std::make_unique<juce::AudioParameterFloat> (chorus, "Chorus", juce::NormalisableRange<float> (0.0f, 1.0f), 0.15f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (reverb, "Reverb", juce::NormalisableRange<float> (0.0f, 1.0f), 0.25f));
         return layout;
     }
 }

@@ -51,7 +51,9 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       preview (param (p, pc::params::preview), "Preview"),
       majorFive (param (p, pc::params::majorFive), "Major V"),
       playLane (param (p, pc::params::playLane), "Play with host"),
-      learn (param (p, pc::params::learn), "Learn")
+      learn (param (p, pc::params::learn), "Learn"),
+      chorusFader (param (p, pc::params::chorus), "Chorus"),
+      reverbFader (param (p, pc::params::reverb), "Reverb")
 {
     setLookAndFeel (&look);
 
@@ -141,7 +143,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -153,10 +155,11 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     }
 
     // The layout is drawn at 1000 x 910 and scaled as a whole, keeping its shape
+    // (read the remembered width first: setting the limits resizes the window, which overwrites it)
+    const int w = juce::jlimit (width * 7 / 10, width * 8 / 5, proc.editorWidth > 0 ? proc.editorWidth : width);
     setResizable (true, true);
     setResizeLimits (width * 7 / 10, height * 7 / 10, width * 8 / 5, height * 8 / 5);
     getConstrainer()->setFixedAspectRatio ((double) width / height);
-    const int w = juce::jlimit (width * 7 / 10, width * 8 / 5, proc.editorWidth > 0 ? proc.editorWidth : width);
     setSize (w, (int) std::lround ((double) w * height / width));
     refresh();
     startTimerHz (30);
@@ -492,4 +495,6 @@ void PotatoChordsEditor::resized()
 
     keyboard.setBounds (margin, keyboardY, right - margin, keyboardH);
     panic.setBounds (right - 128, keyboardY + 3, 120, 26);
+    reverbFader.setBounds (right - 128 - 10 - 170, keyboardY + 3, 170, 26);
+    chorusFader.setBounds (right - 128 - 10 - 170 - 8 - 170, keyboardY + 3, 170, 26);
 }

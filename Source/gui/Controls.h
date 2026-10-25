@@ -76,6 +76,59 @@ namespace pc::gui
         juce::ParameterAttachment attachment;
     };
 
+    // A horizontal fader for a 0-1 parameter: label on the left, percentage on the right.
+    // Drag (or click) to set, double-click for the default.
+    class Fader : public juce::Component
+    {
+    public:
+        Fader (juce::RangedAudioParameter& p, juce::String labelText)
+            : param (p), label (std::move (labelText)),
+              attachment (p, [this] (float v) { value = v; repaint(); })
+        {
+            attachment.sendInitialUpdate();
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat().reduced (1.0f, 2.0f);
+            look::inset (g, r, 8.0f);
+            const auto track = r.reduced (3.0f);
+            const float norm = param.convertTo0to1 (value);
+            if (norm > 0.0f)
+            {
+                const auto fill = track.withWidth (juce::jmax (track.getHeight(), track.getWidth() * norm));
+                look::glow (g, fill, 6.0f, colours::accent, 0.35f + 0.65f * norm);
+                g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.55f), fill.getX(), 0.0f,
+                                                         colours::accent, fill.getRight(), 0.0f, false));
+                g.fillRoundedRectangle (fill, 6.0f);
+            }
+            g.setFont (look::font (13.0f));
+            g.setColour (colours::text);
+            g.drawText (label, track.withTrimmedLeft (8.0f), juce::Justification::centredLeft);
+            g.drawText (juce::String (juce::roundToInt (norm * 100.0f)) + "%", track.withTrimmedRight (8.0f), juce::Justification::centredRight);
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override { attachment.beginGesture(); set (e); }
+        void mouseDrag (const juce::MouseEvent& e) override { set (e); }
+        void mouseUp (const juce::MouseEvent&) override { attachment.endGesture(); }
+        void mouseDoubleClick (const juce::MouseEvent&) override
+        {
+            attachment.setValueAsCompleteGesture (param.convertFrom0to1 (param.getDefaultValue()));
+        }
+
+    private:
+        void set (const juce::MouseEvent& e)
+        {
+            const float norm = juce::jlimit (0.0f, 1.0f, (float) (e.x - 3) / (float) juce::jmax (1, getWidth() - 6));
+            attachment.setValueAsPartOfGesture (param.convertFrom0to1 (norm));
+        }
+
+        juce::RangedAudioParameter& param;
+        juce::String label;
+        float value = 0.0f;
+        juce::ParameterAttachment attachment;
+    };
+
     // A push button in the same raised style
     class ActionButton : public juce::Component
     {

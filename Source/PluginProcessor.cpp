@@ -26,6 +26,8 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     playLaneParam  = apvts.getRawParameterValue (playLane.getParamID());
     rhythmParam    = apvts.getRawParameterValue (rhythm.getParamID());
     melodySoundParam = apvts.getRawParameterValue (melodySound.getParamID());
+    chorusParam = apvts.getRawParameterValue (chorus.getParamID());
+    reverbParam = apvts.getRawParameterValue (reverb.getParamID());
 
     out.ensureSize (8192);
 }
@@ -34,6 +36,7 @@ void PotatoChordsProcessor::prepareToPlay (double newSampleRate, int)
 {
     sampleRate = newSampleRate;
     synth.prepare (newSampleRate);
+    fx.prepare (newSampleRate);
     out.ensureSize (8192);
     // Anything still held from before goes out as note-offs at the start of the next block
     flushRequested = true;
@@ -399,7 +402,7 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     const bool previewOn = previewParam->load() > 0.5f && buffer.getNumChannels() >= 2;
     if (! previewOn)
     {
-        if (previewWasOn) synth.killAll();
+        if (previewWasOn) { synth.killAll(); fx.reset(); }
         previewWasOn = false;
         return;
     }
@@ -425,6 +428,7 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     }
     if (done < buffer.getNumSamples())
         synth.render (left + done, right + done, buffer.getNumSamples() - done);
+    fx.process (left, right, buffer.getNumSamples(), chorusParam->load(), reverbParam->load());
 
     // Gentle soft clip so stacked chords never overload
     for (int ch = 0; ch < 2; ++ch)
@@ -493,6 +497,7 @@ void PotatoChordsProcessor::processBlockBypassed (juce::AudioBuffer<float>& buff
     midi.swapWith (out);
     buffer.clear();
     synth.killAll();
+    fx.reset();
     publishState();
 }
 

@@ -737,6 +737,47 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void fxTests()
+{
+    pc::fx::PreviewFx fx;
+    fx.prepare (sampleRate);
+    std::vector<float> l (4096, 0.0f), r (4096, 0.0f);
+    l[0] = r[0] = 1.0f;
+    fx.process (l.data(), r.data(), 4096, 0.0f, 0.0f);
+    bool dry = l[0] == 1.0f;
+    for (int i = 1; i < 4096; ++i) dry = dry && l[(size_t) i] == 0.0f;
+    CHECK (dry, "chorus and reverb at 0 leave the sound untouched");
+
+    fx.reset();
+    std::fill (l.begin(), l.end(), 0.0f);
+    std::fill (r.begin(), r.end(), 0.0f);
+    l[0] = r[0] = 1.0f;
+    fx.process (l.data(), r.data(), 4096, 0.0f, 1.0f);
+    float tail = 0.0f, peak = 0.0f;
+    bool finite = true;
+    for (int i = 0; i < 4096; ++i)
+    {
+        if (i > 2000) tail = std::max (tail, std::abs (l[(size_t) i]));
+        peak = std::max (peak, std::abs (l[(size_t) i]));
+        finite = finite && std::isfinite (l[(size_t) i]) && std::isfinite (r[(size_t) i]);
+    }
+    CHECK (finite && tail > 1.0e-4f && peak < 2.0f, "reverb rings on after a click");
+
+    // Chorus on a sine: finite, not silent, and the two sides differ (stereo)
+    pc::fx::Chorus chorus;
+    chorus.prepare (sampleRate);
+    for (int i = 0; i < 4096; ++i) l[(size_t) i] = r[(size_t) i] = (float) std::sin (i * 0.05);
+    chorus.process (l.data(), r.data(), 4096, 1.0f);
+    float diff = 0.0f, level = 0.0f;
+    for (int i = 0; i < 4096; ++i)
+    {
+        diff = std::max (diff, std::abs (l[(size_t) i] - r[(size_t) i]));
+        level = std::max (level, std::abs (l[(size_t) i]));
+        finite = finite && std::isfinite (l[(size_t) i]);
+    }
+    CHECK (finite && level > 0.5f && level < 2.0f && diff > 1.0e-3f, "chorus is stereo and stays in range");
+}
+
 void undoTests()
 {
     std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
@@ -822,6 +863,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    fxTests();
     undoTests();
     processorTests();
     std::cout << (failures == 0 ? "All tests passed\n" : "Tests failed\n");

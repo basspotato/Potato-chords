@@ -5,6 +5,7 @@
 #include "Voicing.h"
 #include "MidiOut.h"
 #include "PreviewSynth.h"
+#include "PreviewFx.h"
 #include "Progression.h"
 #include "Sequencer.h"
 #include "Melody.h"
@@ -165,12 +166,15 @@ private:
     std::atomic<float>* playLaneParam = nullptr;
     std::atomic<float>* rhythmParam = nullptr;
     std::atomic<float>* melodySoundParam = nullptr;
+    std::atomic<float>* chorusParam = nullptr;
+    std::atomic<float>* reverbParam = nullptr;
 
     juce::AbstractFifo padFifo { 64 };
     std::array<int, 64> padEvents {};
 
     pc::midiout::NoteTracker tracker;
     pc::synth::PreviewSynth synth;
+    pc::fx::PreviewFx fx;
     juce::MidiBuffer out;
 
     Source source = Source::none;
