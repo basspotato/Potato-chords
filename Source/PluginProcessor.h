@@ -7,6 +7,7 @@
 #include "PreviewSynth.h"
 #include "Progression.h"
 #include "Sequencer.h"
+#include "Melody.h"
 #include "MidiExport.h"
 
 class PotatoChordsProcessor : public juce::AudioProcessor
@@ -83,6 +84,9 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
     pc::progression::Lane lane;  // edited by the GUI, played in time with the host
+    pc::melody::Lane melody;     // the same, for the melody (channel 2)
+    int playingMelodyStep() const { return melodyStepShown.load (std::memory_order_relaxed); }
+    static constexpr int melodyChannel = 2;
 
 private:
     enum class Source { none, pad, key };
@@ -107,6 +111,8 @@ private:
     void enterLaneSlot (int slotIndex, const pc::progression::Snapshot&);
     void startLaneHit (const pc::sequencer::Hit&, int samplePos);
     void stopLaneChord (int samplePos);
+    void melodyStep (const pc::melody::Snapshot&, int step, bool restart, int samplePos);
+    void stopMelodyNote (int samplePos);
     void renderPreview (juce::AudioBuffer<float>&);
     void captureOutput (int numSamples);
     void publishState();
@@ -121,6 +127,7 @@ private:
     std::atomic<float>* previewParam = nullptr;
     std::atomic<float>* playLaneParam = nullptr;
     std::atomic<float>* rhythmParam = nullptr;
+    std::atomic<float>* melodySoundParam = nullptr;
 
     juce::AbstractFifo padFifo { 64 };
     std::array<int, 64> padEvents {};
@@ -144,6 +151,7 @@ private:
     uint8_t laneCode = 0;
     Settings laneSettings;
     pc::voicing::Voiced lanePreviousClose, laneVoicing, lanePlaying;  // voicing of the slot, and the notes sounding now
+    int melodyNote = -1;
     bool blockPlaying = false;
     double blockPpq = 0.0, blockBpm = 120.0, freeQuarters = 0.0;
 
@@ -154,7 +162,7 @@ private:
     std::atomic<int> activeDegree { -1 };
     std::atomic<uint64_t> activeNotes { ~uint64_t (0) };
     std::array<std::atomic<uint64_t>, 2> outputNotes {};
-    std::atomic<int> laneSlot { -1 };
+    std::atomic<int> laneSlot { -1 }, melodyStepShown { -1 };
     std::atomic<bool> hostPlaying { false }, capturing { false };
     std::atomic<double> lastBpm { 120.0 }, lastBarQuarters { 4.0 };
 

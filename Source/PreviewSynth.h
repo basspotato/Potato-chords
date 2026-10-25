@@ -304,13 +304,19 @@ namespace pc::synth
         PreviewSynth() { detail::sineTable(); }  // build the table off the audio thread
 
         void prepare (double sampleRate) { sr = (float) sampleRate; killAll(); }
+        // The sound for new notes on every channel except those given their own with setChannelPreset
         void setPreset (int index) { preset = index >= 0 && index < numPresets ? index : 0; }
+        void setChannelPreset (int channel, int index)
+        {
+            if (channel >= 1 && channel <= 16) channelPreset[(size_t) channel - 1] = index >= 0 && index < numPresets ? index : -1;
+        }
 
         void noteOn (int channel, int note, float velocity)
         {
             for (auto& v : voices)
                 if (v.plays (channel, note)) v.release();
-            voiceFor().start (channel, note, velocity, presets[(size_t) preset], sr, ++order);
+            const int own = channel >= 1 && channel <= 16 ? channelPreset[(size_t) channel - 1] : -1;
+            voiceFor().start (channel, note, velocity, presets[(size_t) (own >= 0 ? own : preset)], sr, ++order);
         }
 
         void noteOff (int channel, int note)
@@ -354,6 +360,7 @@ namespace pc::synth
 
         std::array<Voice, numVoices> voices;
         int preset = 0;
+        std::array<int, 16> channelPreset { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
         float sr = 48000.0f;
         uint32_t order = 0;
     };

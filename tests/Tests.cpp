@@ -661,6 +661,60 @@ void rhythmTests()
     proc->setPlayHead (nullptr);
 }
 
+void melodyTests()
+{
+    using pc::melody::Cell;
+    pc::melody::Lane tune;
+    tune.addNote (4, 2, 0);   // C5 on beat 2, an 1/8 long
+    tune.addNote (8, 1, 2);   // E5 on beat 3
+    auto snap = tune.snapshot();
+    CHECK (snap.cell (4).row == 0 && ! snap.cell (4).hold && snap.cell (5).hold && snap.cell (6).empty(), "a 2-step note is a start and a hold");
+    CHECK (snap.lengthFrom (4) == 2 && snap.noteAt (5).second == 4, "note length and start");
+    tune.addNote (5, 1, 4);   // writing inside a note replaces it
+    snap = tune.snapshot();
+    CHECK (snap.cell (4).empty() && snap.cell (5).row == 4, "a new note over an old one replaces it");
+    tune.removeNote (5);
+    tune.addNote (4, 2, 0);
+    snap = tune.snapshot();
+    CHECK (pc::melody::Snapshot::fromString (snap.toString()).cells == snap.cells, "melody round-trips through its text form");
+    CHECK (pc::melody::Snapshot::fromString ("90").cell (0).empty(), "a hold with nothing before it loads as empty");
+    CHECK (pc::melody::rowToNote (0, 0, Scale::major) == 72 && pc::melody::rowToNote (7, 9, Scale::minor) == 81,
+           "melody rows start at the key root near C5 and climb the scale");
+
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    proc->melody.set (snap);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    Held held;
+    long clock = 0;
+    const auto t = runTransport (*proc, head, 48000 / blockSize, held, clock);  // just under two beats
+    std::vector<std::pair<long, int>> melodyOns, melodyOffs;
+    for (auto& e : t.ons) melodyOns.push_back (e);
+    for (auto& e : t.offs) melodyOffs.push_back (e);
+    CHECK ((melodyOns == std::vector<std::pair<long, int>> { { 24000, 72 } }), "melody note starts on beat 2, to the sample");
+    CHECK ((melodyOffs == std::vector<std::pair<long, int>> { { 36000, 72 } }), "a held note lasts its full length (no retrigger)");
+
+    head.ppq = 1.3;  // locate into the middle of the note
+    auto r = runTransport (*proc, head, 1, held, clock);
+    CHECK (r.ons.size() == 1 && r.ons[0].second == 72, "locating into a note picks it up straight away");
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 0 && held.strayOffs == 0 && held.doubledOns == 0, "melody: stop releases it, nothing stray or doubled");
+
+    juce::MemoryBlock state;
+    proc->getStateInformation (state);
+    auto other = makeProcessor();
+    other->setStateInformation (state.getData(), (int) state.getSize());
+    CHECK (other->melody.snapshot().cells == snap.cells, "state restores the melody");
+
+    const auto file = pc::midiexport::melodyToMidi (snap, 0, Scale::major, 120.0, 4.0);
+    std::vector<double> times;
+    CHECK (countNoteOns (file, &times) == 2 && times.front() == 960.0, "melody export: two notes, the first on beat 2");
+    proc->setPlayHead (nullptr);
+}
+
 void processorTests()
 {
     std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
@@ -714,6 +768,7 @@ int main()
     laneTests();
     exportTests();
     rhythmTests();
+    melodyTests();
     processorTests();
     std::cout << (failures == 0 ? "All tests passed\n" : "Tests failed\n");
     return failures == 0 ? 0 : 1;

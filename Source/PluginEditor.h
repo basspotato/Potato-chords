@@ -6,6 +6,7 @@
 #include "gui/Keyboard.h"
 #include "gui/PotatoLogo.h"
 #include "gui/ProgressionLane.h"
+#include "gui/MelodyLane.h"
 #include <optional>
 
 class PotatoChordsEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -31,18 +32,19 @@ private:
     pc::gui::look::LookAndFeel look;
     juce::Image background;
 
-    juce::ComboBox key, sound, presets, rhythm;
-    juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, soundAttachment, rhythmAttachment;
+    juce::ComboBox key, sound, presets, rhythm, melodySound;
+    juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, soundAttachment, rhythmAttachment, melodySoundAttachment;
     pc::gui::ChoiceStrip scale, flavour, spread;
     pc::gui::Switch chordKeys, preview, majorFive, playLane, learn;
-    pc::gui::ActionButton clearLane { "Clear" }, exportMidi { "Export .mid" };
+    pc::gui::ActionButton clearLane { "Clear" }, clearMelody { "Clear" }, exportMidi { "Export .mid" };
     std::unique_ptr<juce::FileChooser> chooser;
-    pc::gui::DragChip dragLane { "Drag lane" }, dragTake { "Drag take" };
+    pc::gui::DragChip dragLane { "Drag lane" }, dragTake { "Drag take" }, dragMelody { "Drag melody" };
     pc::gui::LedToggle capture { "Capture", pc::gui::colours::record };
     std::array<std::unique_ptr<pc::gui::ChordPad>, pc::theory::numDegrees> pads;
     pc::gui::PotatoLogo logo;
     pc::gui::Display display;
     pc::gui::ProgressionLane lane;
+    pc::gui::MelodyLane melodyLane;
     pc::gui::Keyboard keyboard;
 
     pc::midiexport::Recorder take;

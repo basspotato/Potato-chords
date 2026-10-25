@@ -17,6 +17,7 @@ namespace pc::params
     inline const juce::ParameterID playLane  { "playLane", 1 };
     inline const juce::ParameterID rhythm    { "laneRhythm", 1 };
     inline const juce::ParameterID learn     { "learn", 1 };
+    inline const juce::ParameterID melodySound { "melodySound", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -51,6 +52,7 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterBool> (playLane, "Play progression", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
         return layout;
     }
 }

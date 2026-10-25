@@ -3,6 +3,7 @@
 #include "Progression.h"
 #include "Voicing.h"
 #include "Sequencer.h"
+#include "Melody.h"
 
 // Turning what the plugin plays into Standard MIDI Files, for drag-and-drop into the DAW.
 // Message thread only (these allocate).
@@ -117,6 +118,28 @@ namespace pc::midiexport
                 }
             }
         }
+        return Recorder::makeFile (seq, bpm);
+    }
+
+    // The melody lane as notes (steps past the end of a short bar, e.g. in 3/4, are left out)
+    inline juce::MidiFile melodyToMidi (const melody::Snapshot& tune, int key, theory::Scale scale, double bpm, double barQuarters,
+                                        int channel = 2)
+    {
+        using sequencer::stepQuarters;
+        const int stepsInBar = juce::jmin (melody::stepsPerBar, (int) std::llround (barQuarters / stepQuarters));
+        juce::MidiMessageSequence seq;
+        for (int bar = 0; bar < progression::numBars; ++bar)
+            for (int step = 0; step < stepsInBar; ++step)
+            {
+                const int index = bar * melody::stepsPerBar + step;
+                const auto c = tune.cell (index);
+                if (c.empty() || c.hold) continue;
+                const int length = juce::jmin (tune.lengthFrom (index), stepsInBar - step);
+                const int note = melody::rowToNote (c.row, key, scale);
+                const double on = bar * barQuarters + step * stepQuarters;
+                seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (on));
+                seq.addEvent (juce::MidiMessage::noteOff (channel, note).withTimeStamp (on + length * stepQuarters));
+            }
         return Recorder::makeFile (seq, bpm);
     }
 

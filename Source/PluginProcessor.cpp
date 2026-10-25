@@ -5,6 +5,7 @@ namespace
 {
     const juce::Identifier versionProperty { "version" };
     const juce::Identifier progressionProperty { "progression" };
+    const juce::Identifier melodyProperty { "melody" };
 }
 
 PotatoChordsProcessor::PotatoChordsProcessor()
@@ -24,6 +25,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     previewParam   = apvts.getRawParameterValue (preview.getParamID());
     playLaneParam  = apvts.getRawParameterValue (playLane.getParamID());
     rhythmParam    = apvts.getRawParameterValue (rhythm.getParamID());
+    melodySoundParam = apvts.getRawParameterValue (melodySound.getParamID());
 
     out.ensureSize (8192);
 }
@@ -119,6 +121,7 @@ void PotatoChordsProcessor::flushAll (int samplePos)
     laneVoicing.size = 0;
     laneRunning = false;  // the lane restarts its current chord on the next block if the host is playing
     laneCurrent = -1;
+    melodyNote = -1;
     source = Source::none;
     currentDegree = -1;
     for (auto& ch : passHeld) ch.fill (false);
@@ -263,8 +266,10 @@ void PotatoChordsProcessor::runLane (int numSamples)
     if (! playingNow || playLaneParam->load() < 0.5f || bpm <= 0.0 || numSamples <= 0)
     {
         stopLaneChord (0);
+        stopMelodyNote (0);
         laneRunning = false;
         laneCurrent = -1;
+        melodyStepShown.store (-1, std::memory_order_relaxed);
         return;
     }
 
@@ -292,6 +297,15 @@ void PotatoChordsProcessor::runLane (int numSamples)
     const double startInLoop = inLoop (ppq + 1.0e-9);
     const int now = snap.slotAt (startInLoop, barQ);
     const bool restarted = jumped || now != laneCurrent || snap.chordIn (now).encode() != laneCode || settingsChanged;
+    const auto tune = melody.snapshot();
+    auto melodyIndex = [barQ] (double posInLoop)
+    {
+        const int bar = juce::jlimit (0, pc::progression::numBars - 1, (int) (posInLoop / barQ));
+        const int step = (int) std::floor ((posInLoop - bar * barQ) / pc::sequencer::stepQuarters + 1.0e-6);
+        return step < pc::melody::stepsPerBar ? bar * pc::melody::stepsPerBar + step : -1;
+    };
+    if (jumped || settingsChanged)
+        melodyStep (tune, melodyIndex (startInLoop), true, 0);
     if (restarted)
     {
         stopLaneChord (0);
@@ -302,7 +316,12 @@ void PotatoChordsProcessor::runLane (int numSamples)
 
     // Grid steps inside this block, each on its own sample
     double g = std::ceil (ppq / stepQuarters - 1.0e-6) * stepQuarters;
-    if (restarted && g < ppq + 1.0e-6) g += stepQuarters;  // already handled above
+    if (restarted && g < ppq + 1.0e-6)
+    {
+        // Already handled above for the chord; the melody still needs this step unless it restarted too
+        if (! (jumped || settingsChanged)) melodyStep (tune, melodyIndex (startInLoop), false, 0);
+        g += stepQuarters;
+    }
     for (int guard = 0; guard < 512 && g < endPpq - 1.0e-9; ++guard, g += stepQuarters)
     {
         const double posInLoop = inLoop (g + 1.0e-9);
@@ -313,6 +332,7 @@ void PotatoChordsProcessor::runLane (int numSamples)
             stopLaneChord (samplePos);
             enterLaneSlot (slotIndex, snap);
         }
+        melodyStep (tune, melodyIndex (posInLoop), false, samplePos);
         const int step = stepInSlot (posInLoop, slotIndex);
         if (const auto* hit = pc::sequencer::hitStartingAt (pattern, step))
             startLaneHit (*hit, samplePos);
@@ -320,8 +340,32 @@ void PotatoChordsProcessor::runLane (int numSamples)
             stopLaneChord (samplePos);
     }
 
+    melodyStepShown.store (melodyIndex (inLoop (endPpq - 1.0e-9)), std::memory_order_relaxed);
     expectedPpq = endPpq;
     laneRunning = true;
+}
+
+// One 1/16 step of the melody: a note start retriggers, a hold carries on, anything else ends the note.
+// On a restart a note is picked up even half way through.
+void PotatoChordsProcessor::melodyStep (const pc::melody::Snapshot& tune, int step, bool restart, int samplePos)
+{
+    const auto cell = step >= 0 ? tune.cell (step) : pc::melody::Cell {};
+    if (cell.empty())
+    {
+        stopMelodyNote (samplePos);
+        return;
+    }
+    const int note = pc::melody::rowToNote (cell.row, laneSettings.key, (pc::theory::Scale) laneSettings.scale);
+    if (cell.hold && ! restart && note == melodyNote) return;
+    stopMelodyNote (samplePos);
+    melodyNote = note;
+    tracker.noteOn (out, melodyChannel, note, 100, samplePos);
+}
+
+void PotatoChordsProcessor::stopMelodyNote (int samplePos)
+{
+    if (melodyNote >= 0) tracker.noteOff (out, melodyChannel, melodyNote, samplePos);
+    melodyNote = -1;
 }
 
 void PotatoChordsProcessor::captureOutput (int numSamples)
@@ -360,6 +404,7 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     }
     previewWasOn = true;
     synth.setPreset ((int) soundParam->load());
+    synth.setChannelPreset (melodyChannel, (int) melodySoundParam->load());
 
     auto* left = buffer.getWritePointer (0);
     auto* right = buffer.getWritePointer (1);
@@ -440,6 +485,7 @@ void PotatoChordsProcessor::processBlockBypassed (juce::AudioBuffer<float>& buff
         currentDegree = -1;
     }
     stopLaneChord (0);
+    stopMelodyNote (0);
     laneRunning = false;
     laneCurrent = -1;
     handleMidi (midi, false, false);
@@ -459,6 +505,7 @@ void PotatoChordsProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = apvts.copyState();
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (progressionProperty, juce::String (lane.snapshot().toString()), nullptr);
+    state.setProperty (melodyProperty, juce::String (melody.snapshot().toString()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -472,6 +519,7 @@ void PotatoChordsProcessor::setStateInformation (const void* data, int sizeInByt
             // Migrations from older versions go here, keyed on state[versionProperty]
             state.setProperty (versionProperty, stateVersion, nullptr);
             lane.set (pc::progression::Snapshot::fromString (state[progressionProperty].toString().toStdString()));
+            melody.set (pc::melody::Snapshot::fromString (state[melodyProperty].toString().toStdString()));
             apvts.replaceState (state);
             flushRequested = true;
         }

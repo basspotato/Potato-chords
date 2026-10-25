@@ -51,7 +51,7 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 ## Source layout (planned; update as it's built)
 
-Built so far: Params, Theory, Voicing, Progression, Presets, Sequencer, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane. Lane playback lives in PluginProcessor (runLane); Sequencer.h holds the rhythm patterns.
+Built so far: Params, Theory, Voicing, Progression, Melody, Presets, Sequencer, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane, gui/MelodyLane. Lane playback lives in PluginProcessor (runLane); Sequencer.h holds the rhythm patterns.
 
 ```
 Source/
@@ -59,6 +59,7 @@ Source/
   Theory.h            — scales, modes, chord construction, diatonic degrees
   Voicing.h           — inversions, spread, voice leading, range limits
   Progression.h       — the 8-bar lane (16 half-bar slots), lock-free atomics, state text form
+  Melody.h            — the melody lane: 8 bars x 16 steps, scale rows only, plays on MIDI channel 2
   Sequencer.h         — lane rhythm patterns on a 1/16 grid (playback itself is runLane in PluginProcessor)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
   Presets.h           — factory progressions and next-chord hints
@@ -72,6 +73,7 @@ Source/
   gui/Keyboard.h      — coloured keyboard that lights the sounding notes
   gui/PotatoLogo.h    — smiling potato emblem (from Potato-Kicker)
   gui/ProgressionLane.h — the lane editor
+  gui/MelodyLane.h    — the melody grid
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout

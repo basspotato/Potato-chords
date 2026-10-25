@@ -1,6 +1,7 @@
 // Renders the plugin editor to a PNG without a host, so GUI work can be checked headlessly.
 // Usage: PotatoChordsSnapshot out.png [width] [pad] [preset]
-//   width 0 = default; pad 1-7 holds that chord pad (0 = none); preset 1-8 fills the progression lane
+//   width 0 = default; pad 1-7 holds that chord pad (0 = none); preset 1-8 fills the progression lane;
+//   a 5th argument "melody" adds a short demo melody
 #include "PluginProcessor.h"
 #include "Presets.h"
 
@@ -21,6 +22,10 @@ int main (int argc, char** argv)
         if (argc > 4)
             if (const int preset = juce::String (argv[4]).getIntValue(); preset >= 1 && preset <= (int) pc::presets::progressions.size())
                 proc.lane.set (pc::presets::fill (pc::presets::progressions[(size_t) preset - 1], pc::theory::Flavour::triad));
+        if (argc > 5 && juce::String (argv[5]) == "melody")
+            for (int bar = 0; bar < 8; ++bar)
+                for (auto [step, length, row] : { std::tuple<int, int, int> { 0, 4, 7 }, { 4, 2, 9 }, { 6, 2, 8 }, { 8, 6, 7 }, { 14, 2, 4 } })
+                    proc.melody.addNote (bar * 16 + step, length, (row + bar % 4) % 14);
         if (const int pad = juce::String (argv[3]).getIntValue(); pad >= 1)
             proc.padDown (pad - 1);
         midi.clear();

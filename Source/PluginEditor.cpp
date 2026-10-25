@@ -32,9 +32,9 @@ namespace
     }
 
     // Fixed layout rows, shared by paint() and resized()
-    constexpr int width = 1000, height = 790, margin = 26, topY = 22, topH = 42, flavourY = 78, rowH = 34,
-                  padsY = 122, padsH = 226, fiveY = padsY + padsH + 2, laneHeadY = 390, laneY = 426, laneH = 96,
-                  displayY = 534, displayH = 56, keyboardY = 600, keyboardH = 160;
+    constexpr int width = 1000, height = 910, margin = 26, topY = 22, topH = 42, flavourY = 78, rowH = 34,
+                  padsY = 122, padsH = 202, fiveY = padsY + padsH + 2, laneHeadY = 362, laneY = 398, laneH = 88,
+                  melodyHeadY = 494, melodyY = 530, melodyH = 150, displayY = 690, displayH = 56, keyboardY = 754, keyboardH = 130;
 }
 
 PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
@@ -43,6 +43,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       keyAttachment (p.apvts, pc::params::key.getParamID(), key),
       soundAttachment (p.apvts, pc::params::sound.getParamID(), sound),
       rhythmAttachment (p.apvts, pc::params::rhythm.getParamID(), rhythm),
+      melodySoundAttachment (p.apvts, pc::params::melodySound.getParamID(), melodySound),
       scale (param (p, pc::params::scale), pc::params::scaleNames),
       flavour (param (p, pc::params::flavour), pc::params::flavourNames),
       spread (param (p, pc::params::spread), pc::params::spreadNames),
@@ -59,18 +60,34 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     key.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::key.getParamID())->load(), juce::dontSendNotification);
 
     // Sound presets grouped by type under headings
-    const char* group = "";
-    for (int i = 0; i < pc::synth::numPresets; ++i)
+    for (auto* box : { &sound, &melodySound })
     {
-        const auto& preset = pc::synth::presets[(size_t) i];
-        if (juce::String (preset.group) != group)
+        const char* group = "";
+        for (int i = 0; i < pc::synth::numPresets; ++i)
         {
-            group = preset.group;
-            sound.addSectionHeading (group);
+            const auto& preset = pc::synth::presets[(size_t) i];
+            if (juce::String (preset.group) != group)
+            {
+                group = preset.group;
+                box->addSectionHeading (group);
+            }
+            box->addItem (preset.name, i + 1);
         }
-        sound.addItem (preset.name, i + 1);
     }
     sound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::sound.getParamID())->load(), juce::dontSendNotification);
+    melodySound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::melodySound.getParamID())->load(), juce::dontSendNotification);
+
+    melodyLane.onAdd = [this] (int start, int length, int row) { proc.melody.addNote (start, length, row); refresh(); };
+    melodyLane.onRemove = [this] (int step) { proc.melody.removeNote (step); refresh(); };
+    clearMelody.onClick = [this] { proc.melody.clear(); refresh(); };
+    dragMelody.makeFile = [this]
+    {
+        auto value = [this] (const juce::ParameterID& id) { return (int) proc.apvts.getRawParameterValue (id.getParamID())->load(); };
+        return pc::midiexport::writeTemp (pc::midiexport::melodyToMidi (proc.melody.snapshot(), value (pc::params::key),
+                                                                        (pc::theory::Scale) value (pc::params::scale),
+                                                                        proc.hostBpm(), proc.barQuarters()),
+                                          "Potato-Chords melody");
+    };
 
     for (int i = 0; i < pc::params::rhythmNames.size(); ++i)
         rhythm.addItem ("Rhythm: " + pc::params::rhythmNames[i], i + 1);
@@ -119,7 +136,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
 
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
-                                                            &logo, &display, &lane, &keyboard })
+                                                            &logo, &display, &lane, &keyboard,
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -270,6 +288,34 @@ void PotatoChordsEditor::refresh()
     }
     lane.update (views, snap.splits, proc.playingSlot(), selectedSlot);
 
+    // Melody: rows in the key, and the chord under every step for the chord-tone tint
+    {
+        pc::gui::MelodyLane::View mv;
+        mv.tune = proc.melody.snapshot();
+        const int keyNow = (int) proc.apvts.getRawParameterValue (pc::params::key.getParamID())->load();
+        for (int row = 0; row < pc::melody::numRows; ++row)
+        {
+            const int note = pc::melody::rowToNote (row, keyNow, scaleNow);
+            mv.rowPitchClass[(size_t) row] = note % 12;
+            mv.rowName[(size_t) row] = juce::String (pc::theory::noteName (note, flats)) + juce::String (note / 12 - 2);
+        }
+        const double barQ = proc.barQuarters();
+        mv.stepsInBar = juce::jlimit (1, pc::melody::stepsPerBar, (int) std::llround (barQ / pc::sequencer::stepQuarters));
+        for (int step = 0; step < pc::melody::numSteps; ++step)
+        {
+            const int bar = step / pc::melody::stepsPerBar, inBar = step % pc::melody::stepsPerBar;
+            const int slotIndex = bar * 2 + (snap.isSplit (bar) && inBar * pc::sequencer::stepQuarters >= barQ * 0.5 - 1.0e-9 ? 1 : 0);
+            const auto slot = snap.chordIn (slotIndex);
+            if (slot.empty()) continue;
+            const auto chord = proc.chordFor (slot);
+            for (int k = 0; k < chord.size; ++k)
+                mv.chordMask[(size_t) step] |= (uint16_t) (1 << ((chord.root + chord.intervals[(size_t) k]) % 12));
+        }
+        mv.playingStep = proc.playingMelodyStep();
+        dragMelody.setEnabledLook (mv.tune.cells != pc::melody::Snapshot {}.cells);
+        melodyLane.update (mv);
+    }
+
     bool laneHasChords = false;
     for (auto& v : views) laneHasChords = laneHasChords || ! v.empty;
     dragLane.setEnabledLook (laneHasChords);
@@ -350,10 +396,15 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     drawCaption (g, "Spread", { 560, flavourY, 60, rowH });
     drawCaption (g, "Sound", { 790, flavourY, 56, rowH });
     drawCaption (g, "Progression", { margin, laneHeadY, 110, rowH });
+    drawCaption (g, "Melody", { margin, melodyHeadY, 110, rowH });
+    g.setFont (look::font (12.5f, false));
+    g.setColour (colours::textDim);
+    g.drawText ("Drag right to draw a note, click a note to delete it. Tinted rows = chord notes.",
+                juce::Rectangle<int> (margin + 120 + 200 + 8 + 70 + 14, melodyHeadY, 400, rowH), juce::Justification::centredLeft);
 
 
     // Grooves between sections
-    for (int y : { flavourY - 7, padsY - 4, laneHeadY - 6, displayY - 6 })
+    for (int y : { flavourY - 7, padsY - 4, laneHeadY - 6, melodyHeadY - 6, displayY - 6 })
     {
         g.setColour (juce::Colours::black.withAlpha (0.45f));
         g.drawHorizontalLine (y, (float) margin, (float) (getWidth() - margin));
@@ -400,6 +451,13 @@ void PotatoChordsEditor::resized()
     exportMidi.setBounds (head.removeFromRight (juce::jmin (110, head.getWidth())));
 
     lane.setBounds (margin, laneY, right - margin, laneH);
+
+    auto melodyHead = juce::Rectangle<int> (margin + 120, melodyHeadY, right - margin - 120, rowH);
+    melodySound.setBounds (melodyHead.removeFromLeft (200).reduced (0, 1));
+    melodyHead.removeFromLeft (8);
+    clearMelody.setBounds (melodyHead.removeFromLeft (70));
+    dragMelody.setBounds (melodyHead.removeFromRight (130));
+    melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 
     auto row = juce::Rectangle<int> (margin, displayY, right - margin, displayH);
     dragTake.setBounds (row.removeFromRight (150).reduced (0, 9));
