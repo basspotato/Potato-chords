@@ -88,6 +88,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     melodyLane.onAdd = [this] (int start, int length, int row) { proc.rememberEdit(); proc.melody.addNote (start, length, row); refresh(); };
     melodyLane.onRemove = [this] (int step) { proc.rememberEdit(); proc.melody.removeNote (step); refresh(); };
     clearMelody.onClick = [this] { proc.rememberEdit(); proc.melody.clear(); refresh(); };
+    repeatMelody.onClick = [this] { proc.rememberEdit(); proc.melody.repeatFirstHalf(); refresh(); };
     dragMelody.makeFile = [this]
     {
         auto value = [this] (const juce::ParameterID& id) { return (int) proc.apvts.getRawParameterValue (id.getParamID())->load(); };
@@ -150,7 +151,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -186,6 +187,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (lane, "8 bars. Click a slot, then click a chord pad to fill it. The small box on a bar splits it into two chords. Right-click for more.");
     tip (melodySound, "The built-in sound you hear for the melody.");
     tip (clearMelody, "Empties the melody lane.");
+    tip (repeatMelody, "Copies bars 1 to 4 of the melody over bars 5 to 8.");
     tip (dragMelody, "Drag this into your DAW to drop the melody on a MIDI track.");
     tip (melodyLane, "Drag right to draw a note, click a note to delete it. Only notes of the key are shown; glowing rows are the chord notes.");
     tip (display, "Shows the chord that is playing: its name, its number in the key, and its notes.");
@@ -469,8 +471,8 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     drawCaption (g, "Melody", { margin, melodyHeadY, 110, rowH });
     g.setFont (look::font (12.5f, false));
     g.setColour (colours::textDim);
-    g.drawText ("Drag right to draw a note, click a note to delete it. Tinted rows = chord notes.",
-                juce::Rectangle<int> (margin + 120 + 200 + 8 + 70 + 14, melodyHeadY, 400, rowH), juce::Justification::centredLeft);
+    g.drawText ("Drag to draw, click a note to delete. Tinted rows = chord notes.",
+                juce::Rectangle<int> (margin + 120 + 200 + 8 + 70 + 108 + 14, melodyHeadY, 290, rowH), juce::Justification::centredLeft);
 
 
     // Grooves between sections
@@ -533,6 +535,7 @@ void PotatoChordsEditor::resized()
     melodySound.setBounds (melodyHead.removeFromLeft (200).reduced (0, 1));
     melodyHead.removeFromLeft (8);
     clearMelody.setBounds (melodyHead.removeFromLeft (70));
+    repeatMelody.setBounds (melodyHead.removeFromLeft (108));
     dragMelody.setBounds (melodyHead.removeFromRight (130));
     melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 

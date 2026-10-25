@@ -122,6 +122,14 @@ namespace pc::melody
             set (s);
         }
 
+        // Copies bars 1-4 over bars 5-8
+        void repeatFirstHalf()
+        {
+            auto s = snapshot();
+            for (int i = 0; i < numSteps / 2; ++i) s.cells[(size_t) (numSteps / 2 + i)] = s.cells[(size_t) i];
+            set (s);
+        }
+
         void removeNote (int step)
         {
             auto s = snapshot();

@@ -737,6 +737,18 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void repeatTests()
+{
+    pc::melody::Lane tune;
+    tune.addNote (0, 4, 3);
+    tune.addNote (62, 2, 5);   // runs to the end of bar 4
+    tune.addNote (70, 2, 9);   // already in bar 5: replaced by the copy
+    tune.repeatFirstHalf();
+    const auto s = tune.snapshot();
+    CHECK (s.cell (64).row == 3 && s.lengthFrom (64) == 4 && s.cell (126).row == 5 && s.lengthFrom (126) == 2, "bars 1-4 are copied into bars 5-8");
+    CHECK (s.cell (70).empty() && s.cell (0).row == 3, "the copy replaces what was in bars 5-8 and leaves bars 1-4 alone");
+}
+
 void swingTests()
 {
     auto proc = makeProcessor();
@@ -1058,6 +1070,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    repeatTests();
     swingTests();
     feelTests();
     octaveTests();
