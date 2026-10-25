@@ -23,12 +23,14 @@ namespace pc::params
     inline const juce::ParameterID chorus    { "chorus", 1 };
     inline const juce::ParameterID reverb    { "reverb", 1 };
     inline const juce::ParameterID strum     { "strum", 1 };
+    inline const juce::ParameterID octave    { "chordOctave", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
     // Order matches pc::theory::Flavour, pc::voicing::Spread, pc::synth::presets and pc::sequencer::patterns
     inline const juce::StringArray flavourNames { "Triad", "7th", "sus2", "sus4", "add9", "Power" };
     inline const juce::StringArray spreadNames { "Close", "Wide" };
+    inline const juce::StringArray octaveNames { "-2", "-1", "0", "+1", "+2" };  // index 2 = no shift
     inline const juce::StringArray soundNames = []
     {
         juce::StringArray names;
@@ -58,6 +60,7 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (octave, "Chord octave", octaveNames, 2));
         // Chord notes roll in from low to high, 0-1 = up to strumMaxSeconds between notes (MIDI out too)
         layout.add (std::make_unique<juce::AudioParameterFloat> (strum, "Strum", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
         // Effects on the preview sound only, 0-1

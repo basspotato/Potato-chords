@@ -17,13 +17,22 @@ namespace pc::gui
             attachment.sendInitialUpdate();
         }
 
+        // Optional label drawn inside the strip, on the left
+        void setCaption (juce::String text, int width) { caption = std::move (text); captionWidth = width; repaint(); }
+
         void paint (juce::Graphics& g) override
         {
             look::inset (g, getLocalBounds().toFloat(), 9.0f);
-            const auto w = (float) getWidth() / (float) names.size();
+            if (captionWidth > 0)
+            {
+                g.setFont (look::font (13.0f));
+                g.setColour (colours::text);
+                g.drawText (caption, juce::Rectangle<int> (8, 0, captionWidth - 8, getHeight()), juce::Justification::centredLeft);
+            }
+            const auto w = (float) (getWidth() - captionWidth) / (float) names.size();
             for (int i = 0; i < names.size(); ++i)
             {
-                auto r = juce::Rectangle<float> (w * (float) i, 0.0f, w, (float) getHeight()).reduced (3.0f, 3.5f);
+                auto r = juce::Rectangle<float> ((float) captionWidth + w * (float) i, 0.0f, w, (float) getHeight()).reduced (3.0f, 3.5f);
                 const bool on = i == selected;
                 if (on) look::glow (g, r, 7.0f, colours::accent, 1.0f);
                 look::raised (g, r, 7.0f, on ? colours::accent : colours::panelLight, on);
@@ -36,13 +45,16 @@ namespace pc::gui
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            const int i = juce::jlimit (0, names.size() - 1, (int) ((float) e.x / (float) getWidth() * (float) names.size()));
+            if (e.x < captionWidth) return;
+            const int i = juce::jlimit (0, names.size() - 1,
+                                        (int) ((float) (e.x - captionWidth) / (float) (getWidth() - captionWidth) * (float) names.size()));
             attachment.setValueAsCompleteGesture ((float) i);
         }
 
     private:
         juce::StringArray names;
-        int selected = 0;
+        juce::String caption;
+        int selected = 0, captionWidth = 0;
         juce::ParameterAttachment attachment;
     };
 

@@ -148,4 +148,18 @@ namespace pc::voicing
         detail::sort (v);
         return v;
     }
+
+    // Moves a voicing whole octaves up or down; a note that would leave the MIDI range stays an octave inside it
+    inline Voiced shiftOctaves (Voiced v, int octaves)
+    {
+        for (int i = 0; i < v.size; ++i)
+        {
+            int n = v.notes[(size_t) i] + 12 * octaves;
+            while (n > 127) n -= 12;
+            while (n < 0) n += 12;
+            v.notes[(size_t) i] = n;
+        }
+        detail::sort (v);
+        return v;
+    }
 }

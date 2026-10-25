@@ -29,6 +29,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     chorusParam = apvts.getRawParameterValue (chorus.getParamID());
     reverbParam = apvts.getRawParameterValue (reverb.getParamID());
     strumParam = apvts.getRawParameterValue (strum.getParamID());
+    octaveParam = apvts.getRawParameterValue (octave.getParamID());
 
     out.ensureSize (8192);
 }
@@ -57,6 +58,7 @@ PotatoChordsProcessor::Settings PotatoChordsProcessor::readSettings() const
     s.flavour = (int) flavourParam->load();
     s.spread = (int) spreadParam->load();
     s.majorFive = majorFiveParam->load() > 0.5f;
+    s.octave = (int) octaveParam->load() - 2;
     return s;
 }
 
@@ -103,7 +105,8 @@ void PotatoChordsProcessor::playChord (int degree, juce::uint8 velocity, int sam
     const auto chord = pc::theory::diatonicChord (chordSettings.key, (pc::theory::Scale) chordSettings.scale, degree,
                                                   (pc::theory::Flavour) chordSettings.flavour, chordSettings.majorFive);
     previousClose = pc::voicing::closeVoicing (chord, previousClose);
-    playing = pc::voicing::applySpread (chord, previousClose, (pc::voicing::Spread) chordSettings.spread);
+    playing = pc::voicing::shiftOctaves (pc::voicing::applySpread (chord, previousClose, (pc::voicing::Spread) chordSettings.spread),
+                                         chordSettings.octave);
     startNotes (liveOwner, playing, velocity, samplePos);
     currentDegree = degree;
     chordVelocity = velocity;
@@ -241,7 +244,8 @@ void PotatoChordsProcessor::enterLaneSlot (int slotIndex, const pc::progression:
     const auto chord = pc::theory::diatonicChord (laneSettings.key, (pc::theory::Scale) laneSettings.scale, slot.degree,
                                                   slot.flavour, slot.majorFive);
     lanePreviousClose = pc::voicing::closeVoicing (chord, lanePreviousClose);
-    laneVoicing = pc::voicing::applySpread (chord, lanePreviousClose, (pc::voicing::Spread) laneSettings.spread);
+    laneVoicing = pc::voicing::shiftOctaves (pc::voicing::applySpread (chord, lanePreviousClose, (pc::voicing::Spread) laneSettings.spread),
+                                             laneSettings.octave);
 }
 
 void PotatoChordsProcessor::startLaneHit (const pc::sequencer::Hit& hit, int samplePos)

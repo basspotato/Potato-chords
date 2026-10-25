@@ -737,6 +737,41 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void octaveTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    Held held;
+
+    setParam (*proc, pc::params::octave, 3.0f);  // +1
+    proc->padDown (3);
+    auto out = runBlock (*proc, {});
+    held.add (out);
+    CHECK ((noteOnsIn (out) == Notes { 77, 81, 84 }), "octave +1 lifts pad IV to F5 A5 C6");
+    setParam (*proc, pc::params::octave, 0.0f);  // -2, changed while the chord is held
+    out = runBlock (*proc, {});
+    held.add (out);
+    CHECK ((noteOnsIn (out) == Notes { 41, 45, 48 }) && held.sounding() == 3, "changing octave while holding re-voices the chord");
+    proc->padUp (3);
+    held.add (runBlock (*proc, {}));
+    CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "octave: nothing hangs or doubles");
+
+    pc::voicing::Voiced v;
+    v.notes = { 120, 124, 127, 0 };
+    v.size = 3;
+    const auto up = pc::voicing::shiftOctaves (v, 2);
+    CHECK (up.notes[0] <= up.notes[1] && up.notes[1] <= up.notes[2] && up.notes[2] <= 127, "octave shift never leaves the MIDI range");
+
+    const auto file = pc::midiexport::laneToMidi (pc::presets::fill (pc::presets::progressions[0], Flavour::triad), 0, Scale::major,
+                                                  pc::voicing::Spread::close, 120.0, 4.0, 0, 1, 0.0, -1);
+    Notes first;
+    for (auto* e : *file.getTrack (0))
+        if (e->message.isNoteOn() && e->message.getTimeStamp() < 1.0) first.push_back (e->message.getNoteNumber());
+    std::sort (first.begin(), first.end());
+    CHECK ((first == Notes { 48, 52, 55 }), "exported progression follows the octave");
+}
+
 void strumTests()
 {
     auto proc = makeProcessor();
@@ -930,6 +965,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    octaveTests();
     strumTests();
     fxTests();
     undoTests();

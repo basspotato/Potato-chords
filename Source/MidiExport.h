@@ -82,7 +82,7 @@ namespace pc::midiexport
     // The whole progression lane, voiced and played with the rhythm pattern exactly as the plugin plays it
     inline juce::MidiFile laneToMidi (const progression::Snapshot& lane, int key, theory::Scale scale, voicing::Spread spread,
                                       double bpm, double barQuarters, int patternIndex = 0, int channel = 1,
-                                      double strumSeconds = 0.0)
+                                      double strumSeconds = 0.0, int octaves = 0)
     {
         using sequencer::stepQuarters;
         const auto& pattern = sequencer::patterns[(size_t) juce::jlimit (0, sequencer::numPatterns - 1, patternIndex)];
@@ -99,7 +99,7 @@ namespace pc::midiexport
                 const double start = bar * barQuarters + h * length;
                 const auto chord = theory::diatonicChord (key, scale, slot.degree, slot.flavour, slot.majorFive);
                 previous = voicing::closeVoicing (chord, previous);
-                const auto notes = voicing::applySpread (chord, previous, spread);
+                const auto notes = voicing::shiftOctaves (voicing::applySpread (chord, previous, spread), octaves);
                 const int steps = (int) std::llround (length / stepQuarters);
                 for (int step = 0; step < steps; ++step)
                 {

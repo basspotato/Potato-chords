@@ -131,11 +131,12 @@ private:
 
     struct Settings
     {
-        int key = 0, scale = 0, flavour = 0, spread = 0;
+        int key = 0, scale = 0, flavour = 0, spread = 0, octave = 0;
         bool majorFive = false;
         bool operator!= (const Settings& o) const
         {
-            return key != o.key || scale != o.scale || flavour != o.flavour || spread != o.spread || majorFive != o.majorFive;
+            return key != o.key || scale != o.scale || flavour != o.flavour || spread != o.spread || octave != o.octave
+                || majorFive != o.majorFive;
         }
     };
 
@@ -171,6 +172,7 @@ private:
     std::atomic<float>* chorusParam = nullptr;
     std::atomic<float>* reverbParam = nullptr;
     std::atomic<float>* strumParam = nullptr;
+    std::atomic<float>* octaveParam = nullptr;
 
     juce::AbstractFifo padFifo { 64 };
     std::array<int, 64> padEvents {};

@@ -54,9 +54,11 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       learn (param (p, pc::params::learn), "Learn"),
       chorusFader (param (p, pc::params::chorus), "Chorus"),
       reverbFader (param (p, pc::params::reverb), "Reverb"),
-      strumFader (param (p, pc::params::strum), "Strum")
+      strumFader (param (p, pc::params::strum), "Strum"),
+      octave (param (p, pc::params::octave), pc::params::octaveNames)
 {
     setLookAndFeel (&look);
+    octave.setCaption ("Octave", 56);
 
     key.addItemList (pc::params::keyNames, 1);
     // Attachments were made before the items existed, so resync the shown selection
@@ -144,7 +146,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -201,7 +203,8 @@ juce::File PotatoChordsEditor::laneFile()
         pc::midiexport::laneToMidi (proc.lane.snapshot(), value (pc::params::key), (pc::theory::Scale) value (pc::params::scale),
                                     (pc::voicing::Spread) value (pc::params::spread), proc.hostBpm(), proc.barQuarters(),
                                     value (pc::params::rhythm), PotatoChordsProcessor::chordChannel,
-                                    proc.apvts.getRawParameterValue (pc::params::strum.getParamID())->load() * pc::params::strumMaxSeconds),
+                                    proc.apvts.getRawParameterValue (pc::params::strum.getParamID())->load() * pc::params::strumMaxSeconds,
+                                    (int) proc.apvts.getRawParameterValue (pc::params::octave.getParamID())->load() - 2),
         "Potato-Chords progression");
 }
 
@@ -497,7 +500,8 @@ void PotatoChordsEditor::resized()
 
     keyboard.setBounds (margin, keyboardY, right - margin, keyboardH);
     panic.setBounds (right - 128, keyboardY + 3, 120, 26);
-    reverbFader.setBounds (right - 128 - 10 - 170, keyboardY + 3, 170, 26);
-    chorusFader.setBounds (right - 128 - 10 - 170 - 8 - 170, keyboardY + 3, 170, 26);
-    strumFader.setBounds (right - 128 - 10 - 3 * 170 - 2 * 8 - 24, keyboardY + 3, 170, 26);
+    reverbFader.setBounds (right - 128 - 10 - 150, keyboardY + 3, 150, 26);
+    chorusFader.setBounds (reverbFader.getX() - 8 - 150, keyboardY + 3, 150, 26);
+    strumFader.setBounds (chorusFader.getX() - 20 - 150, keyboardY + 3, 150, 26);
+    octave.setBounds (strumFader.getX() - 8 - 210, keyboardY + 3, 210, 26);
 }
