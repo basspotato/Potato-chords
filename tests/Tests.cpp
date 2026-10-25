@@ -737,6 +737,63 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void feelTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::velocity, 64.0f);
+    proc->padDown (0);
+    auto out = runBlock (*proc, {});
+    bool allAt64 = true;
+    for (const auto meta : out)
+        if (meta.getMessage().isNoteOn()) allAt64 = allAt64 && meta.getMessage().getVelocity() == 64;
+    CHECK (allAt64 && noteOnsIn (out).size() == 3, "pads play at the Velocity setting");
+    proc->padUp (0);
+    runBlock (*proc, {});
+
+    // Humanise: velocities spread within the limit, notes land late (never early), nothing hangs
+    setParam (*proc, pc::params::humanise, 1.0f);
+    Held held;
+    int minVel = 127, maxVel = 0;
+    long latest = 0, clock = 0;
+    for (int round = 0; round < 40; ++round)
+    {
+        proc->padDown (round % 7);
+        for (int b = 0; b < 4; ++b, clock += blockSize)
+        {
+            out = runBlock (*proc, {});
+            held.add (out);
+            for (const auto meta : out)
+                if (meta.getMessage().isNoteOn())
+                {
+                    minVel = std::min (minVel, (int) meta.getMessage().getVelocity());
+                    maxVel = std::max (maxVel, (int) meta.getMessage().getVelocity());
+                    latest = std::max (latest, (long) (b * blockSize + meta.samplePosition));
+                }
+        }
+        proc->padUp (round % 7);
+        held.add (runBlock (*proc, {}));
+        clock += blockSize;
+    }
+    CHECK (minVel >= 64 - pc::params::humaniseMaxVelocity && maxVel <= 64 + pc::params::humaniseMaxVelocity && maxVel - minVel > 10,
+           "humanise varies velocity within its range");
+    CHECK (latest > 0 && latest <= (long) (pc::params::humaniseMaxSeconds * sampleRate) + 1, "humanise delays notes by at most 15 ms");
+    CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "humanised chords start and stop cleanly");
+
+    // The melody goes through the same path
+    setParam (*proc, pc::params::playLane, 1.0f);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    for (int i = 0; i < 64; ++i) proc->melody.addNote (i * 2, 1, i % 14);
+    Held tune;
+    long tuneClock = 0;
+    runTransport (*proc, head, 800, tune, tuneClock);
+    head.playing = false;
+    runTransport (*proc, head, 2, tune, tuneClock);
+    CHECK (tune.sounding() == 0 && tune.doubledOns == 0 && tune.strayOffs == 0, "humanised melody notes start and stop cleanly");
+}
+
 void octaveTests()
 {
     auto proc = makeProcessor();
@@ -965,6 +1022,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    feelTests();
     octaveTests();
     strumTests();
     fxTests();

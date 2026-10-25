@@ -150,8 +150,9 @@ private:
     void enterLaneSlot (int slotIndex, const pc::progression::Snapshot&);
     void startLaneHit (const pc::sequencer::Hit&, int samplePos);
     void stopLaneChord (int samplePos);
-    void startNotes (int owner, const pc::voicing::Voiced&, juce::uint8 velocity, int samplePos);
-    void stopNotes (int owner, const pc::voicing::Voiced&, int samplePos);
+    void startNotes (int owner, const pc::voicing::Voiced&, juce::uint8 velocity, int samplePos, int channel = chordChannel);
+    void stopNotes (int owner, const pc::voicing::Voiced&, int samplePos, int channel = chordChannel);
+    juce::uint8 noteVelocity() const { return (juce::uint8) juce::jlimit (1, 127, (int) velocityParam->load()); }
     void melodyStep (const pc::melody::Snapshot&, int step, bool restart, int samplePos);
     void stopMelodyNote (int samplePos);
     void renderPreview (juce::AudioBuffer<float>&);
@@ -173,6 +174,9 @@ private:
     std::atomic<float>* reverbParam = nullptr;
     std::atomic<float>* strumParam = nullptr;
     std::atomic<float>* octaveParam = nullptr;
+    std::atomic<float>* velocityParam = nullptr;
+    std::atomic<float>* humaniseParam = nullptr;
+    juce::Random random { 0x5eed };
 
     juce::AbstractFifo padFifo { 64 };
     std::array<int, 64> padEvents {};
@@ -180,7 +184,7 @@ private:
     pc::midiout::NoteTracker tracker;
     pc::midiout::Strummer strummer;
     int64_t blockStart = 0;  // samples processed so far: the strum's clock
-    enum Owner { liveOwner = 0, laneOwner = 1 };
+    enum Owner { liveOwner = 0, laneOwner = 1, melodyOwner = 2 };
     pc::synth::PreviewSynth synth;
     pc::fx::PreviewFx fx;
     juce::MidiBuffer out;

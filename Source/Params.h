@@ -7,6 +7,8 @@
 namespace pc::params
 {
     constexpr double strumMaxSeconds = 0.04;
+    constexpr double humaniseMaxSeconds = 0.015;  // latest a humanised note can land
+    constexpr int humaniseMaxVelocity = 20;       // most a humanised velocity can move either way
 
     inline const juce::ParameterID key       { "key", 1 };
     inline const juce::ParameterID scale     { "scale", 1 };
@@ -24,6 +26,8 @@ namespace pc::params
     inline const juce::ParameterID reverb    { "reverb", 1 };
     inline const juce::ParameterID strum     { "strum", 1 };
     inline const juce::ParameterID octave    { "chordOctave", 1 };
+    inline const juce::ParameterID velocity  { "velocity", 1 };
+    inline const juce::ParameterID humanise  { "humanise", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -60,6 +64,10 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
+        // Velocity of pad, lane and melody notes (chord keys keep the velocity played)
+        layout.add (std::make_unique<juce::AudioParameterInt> (velocity, "Velocity", 1, 127, 100));
+        // Random velocity and late timing on every generated note, 0-1
+        layout.add (std::make_unique<juce::AudioParameterFloat> (humanise, "Humanise", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
         layout.add (std::make_unique<juce::AudioParameterChoice> (octave, "Chord octave", octaveNames, 2));
         // Chord notes roll in from low to high, 0-1 = up to strumMaxSeconds between notes (MIDI out too)
         layout.add (std::make_unique<juce::AudioParameterFloat> (strum, "Strum", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));

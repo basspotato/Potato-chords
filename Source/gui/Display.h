@@ -48,7 +48,7 @@ namespace pc::gui
                 // Transport status in the corner, like a hardware screen's top line
                 g.setFont (look::font (11.5f));
                 const auto c = status.startsWith ("PLAY") ? colours::notes[7] : colours::textDim;
-                look::glowText (g, status, inner.removeFromRight (150.0f), c, juce::Justification::centredRight);
+                look::glowText (g, status, inner.removeFromRight (110.0f), c, juce::Justification::centredRight);
             }
             if (name.isEmpty())
             {
@@ -59,14 +59,16 @@ namespace pc::gui
 
             const auto colour = colours::forNote (root);
             g.setFont (look::font (26.0f));
-            look::glowText (g, name, inner.removeFromLeft (130.0f), colour, juce::Justification::centredLeft);
+            look::glowText (g, name, inner.removeFromLeft (110.0f), colour, juce::Justification::centredLeft);
             g.setFont (look::font (18.0f));
-            look::glowText (g, numeral, inner.removeFromLeft (90.0f), colours::text, juce::Justification::centredLeft);
+            look::glowText (g, numeral, inner.removeFromLeft (64.0f), colours::text, juce::Justification::centredLeft);
 
+            // Chips shrink to fit when a wide voicing has many notes
+            const float chipW = notes.size > 0 ? juce::jmin (56.0f, inner.getWidth() / (float) notes.size) : 56.0f;
             for (int i = 0; i < notes.size; ++i)
             {
                 const int note = notes.notes[(size_t) i];
-                auto chip = inner.removeFromLeft (56.0f).reduced (4.0f, 6.0f);
+                auto chip = inner.removeFromLeft (chipW).reduced (3.0f, 6.0f);
                 const auto c = colours::forNote (note);
                 look::glow (g, chip, 7.0f, c, 0.8f);
                 g.setGradientFill (juce::ColourGradient (c.brighter (0.3f), 0.0f, chip.getY(), c, 0.0f, chip.getBottom(), false));

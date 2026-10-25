@@ -55,7 +55,9 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       chorusFader (param (p, pc::params::chorus), "Chorus"),
       reverbFader (param (p, pc::params::reverb), "Reverb"),
       strumFader (param (p, pc::params::strum), "Strum"),
-      octave (param (p, pc::params::octave), pc::params::octaveNames)
+      octave (param (p, pc::params::octave), pc::params::octaveNames),
+      velocityFader (param (p, pc::params::velocity), "Velocity", true),
+      humaniseFader (param (p, pc::params::humanise), "Humanise")
 {
     setLookAndFeel (&look);
     octave.setCaption ("Octave", 56);
@@ -146,7 +148,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -495,6 +497,10 @@ void PotatoChordsEditor::resized()
     dragTake.setBounds (row.removeFromRight (150).reduced (0, 9));
     row.removeFromRight (6);
     capture.setBounds (row.removeFromRight (116).reduced (0, 9));
+    row.removeFromRight (10);
+    auto feel = row.removeFromRight (150);
+    velocityFader.setBounds (feel.removeFromTop (displayH / 2));
+    humaniseFader.setBounds (feel);
     row.removeFromRight (10);
     display.setBounds (row);
 

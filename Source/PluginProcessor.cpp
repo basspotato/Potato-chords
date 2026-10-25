@@ -30,6 +30,8 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     reverbParam = apvts.getRawParameterValue (reverb.getParamID());
     strumParam = apvts.getRawParameterValue (strum.getParamID());
     octaveParam = apvts.getRawParameterValue (octave.getParamID());
+    velocityParam = apvts.getRawParameterValue (velocity.getParamID());
+    humaniseParam = apvts.getRawParameterValue (humanise.getParamID());
 
     out.ensureSize (8192);
 }
@@ -119,28 +121,37 @@ void PotatoChordsProcessor::stopChord (int samplePos)
 }
 
 // A chord's notes, low to high and `strum` apart; the lowest goes out on samplePos
-void PotatoChordsProcessor::startNotes (int owner, const pc::voicing::Voiced& notes, juce::uint8 velocity, int samplePos)
+void PotatoChordsProcessor::startNotes (int owner, const pc::voicing::Voiced& notes, juce::uint8 velocity, int samplePos, int channel)
 {
     const double gap = strumParam->load() * pc::params::strumMaxSeconds * sampleRate;
+    const float human = humaniseParam->load();
     for (int i = 0; i < notes.size; ++i)
     {
         const int note = notes.notes[(size_t) i];
         int rank = 0;
         for (int j = 0; j < notes.size; ++j)
             rank += notes.notes[(size_t) j] < note || (notes.notes[(size_t) j] == note && j < i) ? 1 : 0;
-        const auto delay = (int64_t) std::llround (gap * rank);
-        if (delay == 0) tracker.noteOn (out, chordChannel, note, velocity, samplePos);
-        else            strummer.add (owner, chordChannel, note, velocity, blockStart + samplePos + delay);
+        auto delay = (int64_t) std::llround (gap * rank);
+        auto vel = velocity;
+        if (human > 0.0f)
+        {
+            // Humanise: a little late, never early, so a note is never moved before its chord change
+            delay += (int64_t) std::llround (random.nextFloat() * human * pc::params::humaniseMaxSeconds * sampleRate);
+            const int change = juce::roundToInt ((random.nextFloat() * 2.0f - 1.0f) * human * (float) pc::params::humaniseMaxVelocity);
+            vel = (juce::uint8) juce::jlimit (1, 127, (int) velocity + change);
+        }
+        if (delay == 0) tracker.noteOn (out, channel, note, vel, samplePos);
+        else            strummer.add (owner, channel, note, vel, blockStart + samplePos + delay);
     }
 }
 
 // Notes due before the stop still go out first; later ones never start
-void PotatoChordsProcessor::stopNotes (int owner, const pc::voicing::Voiced& notes, int samplePos)
+void PotatoChordsProcessor::stopNotes (int owner, const pc::voicing::Voiced& notes, int samplePos, int channel)
 {
     strummer.fireUntil (tracker, out, blockStart, blockStart + samplePos, owner);
     for (int i = 0; i < notes.size; ++i)
-        if (! strummer.cancel (owner, chordChannel, notes.notes[(size_t) i]))
-            tracker.noteOff (out, chordChannel, notes.notes[(size_t) i], samplePos);
+        if (! strummer.cancel (owner, channel, notes.notes[(size_t) i]))
+            tracker.noteOff (out, channel, notes.notes[(size_t) i], samplePos);
 }
 
 void PotatoChordsProcessor::flushAll (int samplePos)
@@ -169,7 +180,7 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
         if (degree < 0 || degree >= pc::theory::numDegrees) return;
         if (event > 0)
         {
-            playChord (degree, 100, 0);
+            playChord (degree, noteVelocity(), 0);
             source = Source::pad;
         }
         else if (source == Source::pad && currentDegree == degree)
@@ -262,7 +273,7 @@ void PotatoChordsProcessor::startLaneHit (const pc::sequencer::Hit& hit, int sam
         lanePlaying.size = 1;
         lanePlaying.notes[0] = juce::jmin (127, laneVoicing.notes[(size_t) (hit.arp % laneVoicing.size)] + 12 * (hit.arp / laneVoicing.size));
     }
-    startNotes (laneOwner, lanePlaying, 100, samplePos);
+    startNotes (laneOwner, lanePlaying, noteVelocity(), samplePos);
 }
 
 void PotatoChordsProcessor::stopLaneChord (int samplePos)
@@ -390,12 +401,21 @@ void PotatoChordsProcessor::melodyStep (const pc::melody::Snapshot& tune, int st
     if (cell.hold && ! restart && note == melodyNote) return;
     stopMelodyNote (samplePos);
     melodyNote = note;
-    tracker.noteOn (out, melodyChannel, note, 100, samplePos);
+    pc::voicing::Voiced one;
+    one.notes[0] = note;
+    one.size = 1;
+    startNotes (melodyOwner, one, noteVelocity(), samplePos, melodyChannel);
 }
 
 void PotatoChordsProcessor::stopMelodyNote (int samplePos)
 {
-    if (melodyNote >= 0) tracker.noteOff (out, melodyChannel, melodyNote, samplePos);
+    if (melodyNote >= 0)
+    {
+        pc::voicing::Voiced one;
+        one.notes[0] = melodyNote;
+        one.size = 1;
+        stopNotes (melodyOwner, one, samplePos, melodyChannel);
+    }
     melodyNote = -1;
 }
 

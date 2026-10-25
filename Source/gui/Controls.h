@@ -93,8 +93,9 @@ namespace pc::gui
     class Fader : public juce::Component
     {
     public:
-        Fader (juce::RangedAudioParameter& p, juce::String labelText)
-            : param (p), label (std::move (labelText)),
+        // showValue: print the parameter's own value (e.g. a velocity) instead of a percentage
+        Fader (juce::RangedAudioParameter& p, juce::String labelText, bool showValue = false)
+            : param (p), label (std::move (labelText)), rawValue (showValue),
               attachment (p, [this] (float v) { value = v; repaint(); })
         {
             attachment.sendInitialUpdate();
@@ -117,7 +118,7 @@ namespace pc::gui
             g.setFont (look::font (13.0f));
             g.setColour (colours::text);
             g.drawText (label, track.withTrimmedLeft (8.0f), juce::Justification::centredLeft);
-            g.drawText (juce::String (juce::roundToInt (norm * 100.0f)) + "%", track.withTrimmedRight (8.0f), juce::Justification::centredRight);
+            g.drawText (rawValue ? juce::String (juce::roundToInt (value)) : juce::String (juce::roundToInt (norm * 100.0f)) + "%", track.withTrimmedRight (8.0f), juce::Justification::centredRight);
         }
 
         void mouseDown (const juce::MouseEvent& e) override { attachment.beginGesture(); set (e); }
@@ -137,6 +138,7 @@ namespace pc::gui
 
         juce::RangedAudioParameter& param;
         juce::String label;
+        bool rawValue = false;
         float value = 0.0f;
         juce::ParameterAttachment attachment;
     };
