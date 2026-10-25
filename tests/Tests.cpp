@@ -737,6 +737,58 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void songTests()
+{
+    using namespace pc::song;
+    CHECK (fromTemplate (0).totalBars() == 104 && fromTemplate (1).totalBars() == 88 && fromTemplate (2).totalBars() == 176,
+           "templates: Pop 104, Pop-EDM 88, EDM club 176 bars");
+    const auto pop = fromTemplate (0);
+    CHECK (Song::fromString (pop.toString()).toString() == pop.toString(), "a song round-trips through its text form");
+    CHECK (Song::fromString ("x 3:7 99:8 1:16 :4 2:").toString() == "1:16", "bad song text keeps only the valid sections");
+    CHECK (barsForMinutes (3.5, 128.0, 4.0) == 112 && barsForMinutes (0.1, 120.0, 4.0) == 8, "minutes to bars, rounded to 8");
+
+    bool rulesKept = true, close = true;
+    for (int t = 0; t < numTemplates; ++t)
+        for (int target : { 48, 64, 80, 96, 112, 128, 160, 200, 240 })
+        {
+            const auto song = fitToBars (t, target);
+            for (int i = 0; i < song.count; ++i)
+            {
+                const auto& sec = song.sections[(size_t) i];
+                rulesKept = rulesKept && sec.bars % 4 == 0 && sec.bars >= 4;
+            }
+            // The rules move in 4-bar to whole-group steps (a club group is 56 bars), so 24 bars is the worst case
+            const int total = song.totalBars();
+            if (target >= 64 && target <= 200) close = close && std::abs (total - target) <= 24;
+        }
+    CHECK (rulesKept, "fitting keeps every section a multiple of 4 bars, none under 4");
+    CHECK (close, "fitting lands within 24 bars of the target for 64-200 bars");
+    CHECK (fitToBars (0, 104).toString() == pop.toString(), "fitting to the template's own length changes nothing");
+
+    // Section MIDI: Pop intro (8 bars, no melody) then verse (16 bars, loop A, melody)
+    auto lane = pc::presets::fill (pc::presets::progressions[0], Flavour::triad);  // I V vi IV twice
+    lane.slots[8] = pc::progression::Slot { 3, Flavour::triad, false }.encode();      // bar 5 = IV, so loop B differs
+    pc::melody::Lane tune;
+    tune.addNote (0, 4, 0);
+    pc::midiexport::Feel chords, melodyFeel;
+    melodyFeel.channel = 2;
+    const auto file = pc::midiexport::songToMidi (pop, 0, 2, lane, tune.snapshot(), chords, melodyFeel);
+    CHECK (file.getNumTracks() == 2, "a section file has a chord track and a melody track");
+    double lastOff = 0.0, firstMelody = -1.0;
+    for (auto* e : *file.getTrack (0)) if (e->message.isNoteOff()) lastOff = std::max (lastOff, e->message.getTimeStamp());
+    for (auto* e : *file.getTrack (1)) if (e->message.isNoteOn() && firstMelody < 0) firstMelody = e->message.getTimeStamp();
+    CHECK (lastOff <= 24 * 4 * 960 && lastOff > 23 * 4 * 960, "intro + verse fill exactly 24 bars");
+    CHECK (firstMelody == 8 * 4 * 960, "the melody waits for the verse (no melody in the intro)");
+
+    // The chorus loops bars 5-8 of the lane: its first chord is IV (F A C), the intro's is I
+    const auto chorus = pc::midiexport::songToMidi (pop, 3, 4, lane, tune.snapshot(), chords, melodyFeel);
+    Notes firstChord;
+    for (auto* e : *chorus.getTrack (0))
+        if (e->message.isNoteOn() && e->message.getTimeStamp() < 1.0) firstChord.push_back (e->message.getNoteNumber() % 12);
+    std::sort (firstChord.begin(), firstChord.end());
+    CHECK ((firstChord == Notes { 0, 5, 9 }), "a chorus loops lane bars 5-8");
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1109,6 +1161,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    songTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();
