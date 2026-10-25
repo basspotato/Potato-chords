@@ -51,6 +51,8 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 ## Source layout (planned; update as it's built)
 
+Built so far: Params, Theory, Voicing, MidiOut, PreviewSynth, gui/Colours, gui/Controls, gui/ChordPad.
+
 ```
 Source/
   Params.h            — every APVTS parameter ID, range and default (single source of truth)
@@ -60,6 +62,10 @@ Source/
   Sequencer.h         — step/pattern playback synced to host PPQ (rhythm, length, gate, swing, strum)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
   Presets.h           — factory progressions/patterns
+  PreviewSynth.h      — built-in 16-voice preview synth (Piano, Soft Piano, E-Piano, Pad, Pluck, Lead)
+  gui/Colours.h       — the note-colour table and interface colours (the only place colours live)
+  gui/Controls.h      — own-look parameter controls (ChoiceStrip, Switch)
+  gui/ChordPad.h      — one chord pad
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout
