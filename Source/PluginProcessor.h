@@ -92,7 +92,40 @@ public:
     static constexpr int melodyChannel = 2;
     int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
+    // Undo for lane and melody edits (message thread only). Call rememberEdit() just before changing either lane.
+    void rememberEdit()
+    {
+        push (undoStack, currentLanes());
+        redoStack.clear();
+    }
+    bool canUndo() const { return ! undoStack.empty(); }
+    bool canRedo() const { return ! redoStack.empty(); }
+    void undo() { step (undoStack, redoStack); }
+    void redo() { step (redoStack, undoStack); }  // last window width, so the editor reopens at the same size (message thread only)
+
 private:
+    struct Lanes
+    {
+        pc::progression::Snapshot lane;
+        pc::melody::Snapshot tune;
+    };
+    static constexpr size_t maxUndo = 100;
+    Lanes currentLanes() const { return { lane.snapshot(), melody.snapshot() }; }
+    static void push (std::vector<Lanes>& stack, Lanes l)
+    {
+        if (stack.size() >= maxUndo) stack.erase (stack.begin());
+        stack.push_back (std::move (l));
+    }
+    void step (std::vector<Lanes>& from, std::vector<Lanes>& to)
+    {
+        if (from.empty()) return;
+        push (to, currentLanes());
+        lane.set (from.back().lane);
+        melody.set (from.back().tune);
+        from.pop_back();
+    }
+    std::vector<Lanes> undoStack, redoStack;
+
     enum class Source { none, pad, key };
 
     struct Settings

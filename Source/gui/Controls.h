@@ -82,17 +82,40 @@ namespace pc::gui
     public:
         std::function<void()> onClick;
 
-        explicit ActionButton (juce::String labelText) : label (std::move (labelText)) {}
+        // arrow: 0 = text label, -1 = undo arrow, 1 = redo arrow
+        explicit ActionButton (juce::String labelText, int arrowIcon = 0) : label (std::move (labelText)), arrow (arrowIcon) {}
 
         void paint (juce::Graphics& g) override
         {
             auto r = getLocalBounds().toFloat().reduced (2.0f, 3.0f);
             look::raised (g, r, 8.0f, colours::panelLight, down);
             if (down) r = r.translated (0.0f, 1.5f);
-            g.setFont (look::font (14.0f));
-            g.setColour (colours::text);
-            g.drawText (label, r, juce::Justification::centred);
+            const auto ink = isEnabled() ? colours::text : colours::textDim.withAlpha (0.45f);
+            if (arrow == 0)
+            {
+                g.setFont (look::font (14.0f));
+                g.setColour (ink);
+                g.drawText (label, r, juce::Justification::centred);
+                return;
+            }
+            // A curved arrow, drawn for undo and mirrored for redo
+            const auto c = r.getCentre();
+            juce::Path arc, head;
+            arc.addCentredArc (c.x, c.y + 3.0f, 7.0f, 6.0f, 0.0f, -1.9f, 1.9f, true);
+            head.addTriangle (-4.5f, 0.0f, 2.5f, -4.0f, 2.5f, 4.0f);
+            head.applyTransform (juce::AffineTransform::rotation (-0.35f).translated (c.x - 7.0f, c.y + 0.5f));
+            if (arrow > 0)
+            {
+                const auto mirror = juce::AffineTransform::scale (-1.0f, 1.0f, c.x, c.y);
+                arc.applyTransform (mirror);
+                head.applyTransform (mirror);
+            }
+            g.setColour (ink);
+            g.strokePath (arc, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.fillPath (head);
         }
+
+        void enablementChanged() override { repaint(); }
 
         void mouseDown (const juce::MouseEvent&) override { down = true; repaint(); }
         void mouseUp (const juce::MouseEvent& e) override
@@ -104,6 +127,7 @@ namespace pc::gui
 
     private:
         juce::String label;
+        int arrow = 0;
         bool down = false;
     };
 }

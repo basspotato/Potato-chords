@@ -737,6 +737,37 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void undoTests()
+{
+    std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
+    CHECK (! proc->canUndo() && ! proc->canRedo(), "nothing to undo at start");
+
+    pc::progression::Slot slot;
+    slot.degree = 4;
+    proc->rememberEdit();
+    proc->lane.setSlot (0, slot);
+    proc->rememberEdit();
+    proc->melody.addNote (0, 4, 2);
+
+    proc->undo();
+    CHECK (proc->melody.snapshot().cell (0).empty() && proc->lane.slot (0).degree == 4, "undo removes the last edit only");
+    proc->undo();
+    CHECK (proc->lane.slot (0).empty() && ! proc->canUndo(), "undo goes back to the start");
+    proc->redo();
+    proc->redo();
+    CHECK (proc->lane.slot (0).degree == 4 && proc->melody.snapshot().cell (0).row == 2 && ! proc->canRedo(), "redo brings both edits back");
+
+    proc->undo();
+    proc->rememberEdit();
+    proc->lane.setSplit (1, true);
+    CHECK (! proc->canRedo(), "a new edit clears redo");
+
+    for (int i = 0; i < 150; ++i) { proc->rememberEdit(); proc->melody.addNote (i % 128, 1, i % 14); }
+    int steps = 0;
+    while (proc->canUndo()) { proc->undo(); ++steps; }
+    CHECK (steps == 100, "undo history is capped at 100 steps");
+}
+
 void processorTests()
 {
     std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
@@ -791,6 +822,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    undoTests();
     processorTests();
     std::cout << (failures == 0 ? "All tests passed\n" : "Tests failed\n");
     return failures == 0 ? 0 : 1;

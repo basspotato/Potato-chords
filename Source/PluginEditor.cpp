@@ -77,9 +77,9 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     sound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::sound.getParamID())->load(), juce::dontSendNotification);
     melodySound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::melodySound.getParamID())->load(), juce::dontSendNotification);
 
-    melodyLane.onAdd = [this] (int start, int length, int row) { proc.melody.addNote (start, length, row); refresh(); };
-    melodyLane.onRemove = [this] (int step) { proc.melody.removeNote (step); refresh(); };
-    clearMelody.onClick = [this] { proc.melody.clear(); refresh(); };
+    melodyLane.onAdd = [this] (int start, int length, int row) { proc.rememberEdit(); proc.melody.addNote (start, length, row); refresh(); };
+    melodyLane.onRemove = [this] (int step) { proc.rememberEdit(); proc.melody.removeNote (step); refresh(); };
+    clearMelody.onClick = [this] { proc.rememberEdit(); proc.melody.clear(); refresh(); };
     dragMelody.makeFile = [this]
     {
         auto value = [this] (const juce::ParameterID& id) { return (int) proc.apvts.getRawParameterValue (id.getParamID())->load(); };
@@ -107,20 +107,23 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         presets.setSelectedId (0, juce::dontSendNotification);
     };
 
-    clearLane.onClick = [this] { proc.lane.clear(); selectedSlot = 0; };
+    clearLane.onClick = [this] { proc.rememberEdit(); proc.lane.clear(); selectedSlot = 0; refresh(); };
 
     lane.onSelect = [this] (int slot) { selectedSlot = slot; refresh(); };
     lane.onSplit = [this] (int bar, bool split)
     {
+        proc.rememberEdit();
         proc.lane.setSplit (bar, split);
         if (! split && selectedSlot == bar * 2 + 1) selectedSlot = bar * 2;
         refresh();
     };
-    lane.onClear = [this] (int slot) { proc.lane.setSlot (slot, {}); refresh(); };
+    lane.onClear = [this] (int slot) { proc.rememberEdit(); proc.lane.setSlot (slot, {}); refresh(); };
 
     dragLane.makeFile = [this] { return laneFile(); };
     exportMidi.onClick = [this] { exportLane(); };
     panic.onClick = [this] { proc.panic(); };
+    undo.onClick = [this] { proc.undo(); refresh(); };
+    redo.onClick = [this] { proc.redo(); refresh(); };
     dragTake.makeFile = [this]
     {
         return pc::midiexport::writeTemp (take.toMidiFile (proc.hostBpm(), proc.barQuarters()), "Potato-Chords capture");
@@ -138,7 +141,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -178,6 +181,7 @@ void PotatoChordsEditor::padPressed (int degree)
     slot.degree = degree;
     slot.flavour = (pc::theory::Flavour) (int) proc.apvts.getRawParameterValue (pc::params::flavour.getParamID())->load();
     slot.majorFive = proc.apvts.getRawParameterValue (pc::params::majorFive.getParamID())->load() > 0.5f;
+    proc.rememberEdit();
     proc.lane.setSlot (selectedSlot, slot);
 
     int next = selectedSlot + 1;
@@ -220,6 +224,7 @@ void PotatoChordsEditor::loadPreset (int index)
 {
     const auto& pr = pc::presets::progressions[(size_t) index];
     setParam (proc, pc::params::scale, pr.scale == pc::theory::Scale::major ? 0.0f : 1.0f);
+    proc.rememberEdit();
     proc.lane.set (pc::presets::fill (pr, (pc::theory::Flavour) (int) proc.apvts.getRawParameterValue (pc::params::flavour.getParamID())->load()));
     selectedSlot = -1;
     refresh();
@@ -252,6 +257,8 @@ void PotatoChordsEditor::timerCallback() { refresh(); }
 
 void PotatoChordsEditor::refresh()
 {
+    undo.setEnabled (proc.canUndo());
+    redo.setEnabled (proc.canRedo());
     const int held = proc.heldDegree();
     const bool flats = proc.keyUsesFlats();
     const bool minor = (int) proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load() == 1;
@@ -437,11 +444,14 @@ void PotatoChordsEditor::resized()
     key.setBounds (top.removeFromLeft (76));
     top.removeFromLeft (8);
     scale.setBounds (top.removeFromLeft (160));
-    preview.setBounds (top.removeFromRight (114));
+    top.removeFromLeft (10);
+    undo.setBounds (top.removeFromLeft (38));
+    redo.setBounds (top.removeFromLeft (38));
+    preview.setBounds (top.removeFromRight (100));
     top.removeFromRight (8);
-    chordKeys.setBounds (top.removeFromRight (142));
+    chordKeys.setBounds (top.removeFromRight (124));
     top.removeFromRight (8);
-    learn.setBounds (top.removeFromRight (100));
+    learn.setBounds (top.removeFromRight (92));
 
     flavour.setBounds (margin + 74, flavourY, 450, rowH);
     spread.setBounds (622, flavourY, 156, rowH);
