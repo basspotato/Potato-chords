@@ -57,7 +57,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       strumFader (param (p, pc::params::strum), "Strum"),
       octave (param (p, pc::params::octave), pc::params::octaveNames),
       velocityFader (param (p, pc::params::velocity), "Velocity", true),
-      humaniseFader (param (p, pc::params::humanise), "Humanise")
+      humaniseFader (param (p, pc::params::humanise), "Humanise"),
+      swingFader (param (p, pc::params::swing), "Swing")
 {
     setLookAndFeel (&look);
     octave.setCaption ("Octave", 56);
@@ -92,7 +93,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         auto value = [this] (const juce::ParameterID& id) { return (int) proc.apvts.getRawParameterValue (id.getParamID())->load(); };
         return pc::midiexport::writeTemp (pc::midiexport::melodyToMidi (proc.melody.snapshot(), value (pc::params::key),
                                                                         (pc::theory::Scale) value (pc::params::scale),
-                                                                        proc.hostBpm(), proc.barQuarters()),
+                                                                        proc.hostBpm(), proc.barQuarters(), pc::midiexport::melodyChannelDefault,
+                                                                        proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load()),
                                           "Potato-Chords melody");
     };
 
@@ -148,7 +150,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -206,7 +208,8 @@ juce::File PotatoChordsEditor::laneFile()
                                     (pc::voicing::Spread) value (pc::params::spread), proc.hostBpm(), proc.barQuarters(),
                                     value (pc::params::rhythm), PotatoChordsProcessor::chordChannel,
                                     proc.apvts.getRawParameterValue (pc::params::strum.getParamID())->load() * pc::params::strumMaxSeconds,
-                                    (int) proc.apvts.getRawParameterValue (pc::params::octave.getParamID())->load() - 2),
+                                    (int) proc.apvts.getRawParameterValue (pc::params::octave.getParamID())->load() - 2,
+                                    proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load()),
         "Potato-Chords progression");
 }
 
@@ -506,8 +509,9 @@ void PotatoChordsEditor::resized()
 
     keyboard.setBounds (margin, keyboardY, right - margin, keyboardH);
     panic.setBounds (right - 128, keyboardY + 3, 120, 26);
-    reverbFader.setBounds (right - 128 - 10 - 150, keyboardY + 3, 150, 26);
-    chorusFader.setBounds (reverbFader.getX() - 8 - 150, keyboardY + 3, 150, 26);
-    strumFader.setBounds (chorusFader.getX() - 20 - 150, keyboardY + 3, 150, 26);
-    octave.setBounds (strumFader.getX() - 8 - 210, keyboardY + 3, 210, 26);
+    reverbFader.setBounds (right - 128 - 10 - 112, keyboardY + 3, 112, 26);
+    chorusFader.setBounds (reverbFader.getX() - 8 - 112, keyboardY + 3, 112, 26);
+    swingFader.setBounds (chorusFader.getX() - 20 - 112, keyboardY + 3, 112, 26);
+    strumFader.setBounds (swingFader.getX() - 8 - 112, keyboardY + 3, 112, 26);
+    octave.setBounds (strumFader.getX() - 8 - 186, keyboardY + 3, 186, 26);
 }

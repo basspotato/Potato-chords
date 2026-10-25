@@ -7,6 +7,7 @@
 namespace pc::params
 {
     constexpr double strumMaxSeconds = 0.04;
+    constexpr double swingMaxStep = 1.0 / 3.0;    // at full swing every odd 1/16 lands a third of a step late (triplet feel)
     constexpr double humaniseMaxSeconds = 0.015;  // latest a humanised note can land
     constexpr int humaniseMaxVelocity = 20;       // most a humanised velocity can move either way
 
@@ -27,6 +28,7 @@ namespace pc::params
     inline const juce::ParameterID strum     { "strum", 1 };
     inline const juce::ParameterID octave    { "chordOctave", 1 };
     inline const juce::ParameterID velocity  { "velocity", 1 };
+    inline const juce::ParameterID swing     { "swing", 1 };
     inline const juce::ParameterID humanise  { "humanise", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -64,6 +66,8 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (rhythm, "Rhythm", rhythmNames, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (learn, "Learn mode", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
+        // Pushes the odd 1/16 steps of the lane and melody late, 0-1
+        layout.add (std::make_unique<juce::AudioParameterFloat> (swing, "Swing", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
         // Velocity of pad, lane and melody notes (chord keys keep the velocity played)
         layout.add (std::make_unique<juce::AudioParameterInt> (velocity, "Velocity", 1, 127, 100));
         // Random velocity and late timing on every generated note, 0-1

@@ -32,6 +32,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     octaveParam = apvts.getRawParameterValue (octave.getParamID());
     velocityParam = apvts.getRawParameterValue (velocity.getParamID());
     humaniseParam = apvts.getRawParameterValue (humanise.getParamID());
+    swingParam = apvts.getRawParameterValue (swing.getParamID());
 
     out.ensureSize (8192);
 }
@@ -131,7 +132,7 @@ void PotatoChordsProcessor::startNotes (int owner, const pc::voicing::Voiced& no
         int rank = 0;
         for (int j = 0; j < notes.size; ++j)
             rank += notes.notes[(size_t) j] < note || (notes.notes[(size_t) j] == note && j < i) ? 1 : 0;
-        auto delay = (int64_t) std::llround (gap * rank);
+        auto delay = (int64_t) std::llround (gap * rank) + (owner == liveOwner ? 0 : swingDelay);
         auto vel = velocity;
         if (human > 0.0f)
         {
@@ -320,6 +321,7 @@ void PotatoChordsProcessor::runLane (int numSamples)
     const double loopQ = pc::progression::Snapshot::lengthQuarters (barQ);
     const double ppqPerSample = bpm / 60.0 / sampleRate;
     const double endPpq = ppq + numSamples * ppqPerSample;
+    const int swingSamples = (int) std::llround (swingParam->load() * pc::params::swingMaxStep * stepQuarters / ppqPerSample);
     const auto snap = lane.snapshot();
     const auto settings = readSettings();
     const auto& pattern = pc::sequencer::patterns[(size_t) juce::jlimit (0, pc::sequencer::numPatterns - 1, (int) rhythmParam->load())];
@@ -374,13 +376,17 @@ void PotatoChordsProcessor::runLane (int numSamples)
             stopLaneChord (samplePos);
             enterLaneSlot (slotIndex, snap);
         }
-        melodyStep (tune, melodyIndex (posInLoop), false, samplePos);
+        const int tuneIndex = melodyIndex (posInLoop);
+        swingDelay = tuneIndex >= 0 && tuneIndex % 2 == 1 ? swingSamples : 0;
+        melodyStep (tune, tuneIndex, false, samplePos);
         const int step = stepInSlot (posInLoop, slotIndex);
+        swingDelay = step % 2 == 1 ? swingSamples : 0;
         if (const auto* hit = pc::sequencer::hitStartingAt (pattern, step))
             startLaneHit (*hit, samplePos);
         else if (pc::sequencer::hitSoundingAt (pattern, step) == nullptr)
             stopLaneChord (samplePos);
     }
+    swingDelay = 0;
 
     melodyStepShown.store (melodyIndex (inLoop (endPpq - 1.0e-9)), std::memory_order_relaxed);
     expectedPpq = endPpq;

@@ -10,6 +10,7 @@
 namespace pc::midiexport
 {
     constexpr int ticksPerQuarter = 960;
+    constexpr int melodyChannelDefault = 2;
 
     // One outgoing MIDI event as the audio thread hands it over, timed in quarter notes
     struct CaptureEvent
@@ -82,7 +83,7 @@ namespace pc::midiexport
     // The whole progression lane, voiced and played with the rhythm pattern exactly as the plugin plays it
     inline juce::MidiFile laneToMidi (const progression::Snapshot& lane, int key, theory::Scale scale, voicing::Spread spread,
                                       double bpm, double barQuarters, int patternIndex = 0, int channel = 1,
-                                      double strumSeconds = 0.0, int octaves = 0)
+                                      double strumSeconds = 0.0, int octaves = 0, double swing = 0.0)
     {
         using sequencer::stepQuarters;
         const auto& pattern = sequencer::patterns[(size_t) juce::jlimit (0, sequencer::numPatterns - 1, patternIndex)];
@@ -105,7 +106,7 @@ namespace pc::midiexport
                 {
                     const auto* hit = sequencer::hitStartingAt (pattern, step);
                     if (hit == nullptr) continue;
-                    const double on = start + step * stepQuarters;
+                    const double on = start + step * stepQuarters + (step % 2 == 1 ? swing * sequencer::stepQuarters / 3.0 : 0.0);
                     const double off = start + juce::jmin (steps, step + hit->length) * stepQuarters;
                     const double gap = strumSeconds * bpm / 60.0;  // in quarters
                     auto add = [&] (int note, int rank)
@@ -134,7 +135,7 @@ namespace pc::midiexport
 
     // The melody lane as notes (steps past the end of a short bar, e.g. in 3/4, are left out)
     inline juce::MidiFile melodyToMidi (const melody::Snapshot& tune, int key, theory::Scale scale, double bpm, double barQuarters,
-                                        int channel = 2)
+                                        int channel = melodyChannelDefault, double swing = 0.0)
     {
         using sequencer::stepQuarters;
         const int stepsInBar = juce::jmin (melody::stepsPerBar, (int) std::llround (barQuarters / stepQuarters));
@@ -147,7 +148,7 @@ namespace pc::midiexport
                 if (c.empty() || c.hold) continue;
                 const int length = juce::jmin (tune.lengthFrom (index), stepsInBar - step);
                 const int note = melody::rowToNote (c.row, key, scale);
-                const double on = bar * barQuarters + step * stepQuarters;
+                const double on = bar * barQuarters + step * stepQuarters + (step % 2 == 1 ? swing * stepQuarters / 3.0 : 0.0);
                 seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (on));
                 seq.addEvent (juce::MidiMessage::noteOff (channel, note).withTimeStamp (on + length * stepQuarters));
             }

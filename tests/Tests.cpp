@@ -737,6 +737,42 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void swingTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::rhythm, 6.0f);  // 16th pulse
+    setParam (*proc, pc::params::swing, 1.0f);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));
+    Held held;
+    long clock = 0;
+    // 120 BPM: a 1/16 step is 6000 samples, so full swing pushes odd steps 2000 samples late
+    const auto t = runTransport (*proc, head, 6000 * 6 / blockSize + 8, held, clock);
+    std::vector<long> starts;
+    for (auto& [pos, note] : t.ons)
+        if (starts.empty() || starts.back() != pos) starts.push_back (pos);
+    CHECK (starts.size() >= 6 && starts[0] == 0 && starts[1] == 6000 + 2000 && starts[2] == 12000 && starts[3] == 18000 + 2000,
+           "swing pushes every odd 1/16 late by a third of a step");
+
+    head.playing = false;
+    runTransport (*proc, head, 4, held, clock);
+    CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "swung notes start and stop cleanly");
+
+    CHECK (pc::sequencer::numPatterns == 11 && pc::params::rhythmNames.size() == 11, "eleven rhythms, all named in the parameter");
+    CHECK (pc::sequencer::patterns[0].period == 64 && pc::sequencer::patterns[5].numHits == 16, "the first six rhythms keep their places");
+
+    const auto file = pc::midiexport::laneToMidi (pc::presets::fill (pc::presets::progressions[0], Flavour::triad), 0, Scale::major,
+                                                  pc::voicing::Spread::close, 120.0, 4.0, 6, 1, 0.0, 0, 1.0);
+    std::vector<int> times;
+    for (auto* e : *file.getTrack (0))
+        if (e->message.isNoteOn() && times.size() < 12 && (times.empty() || times.back() != (int) e->message.getTimeStamp()))
+            times.push_back ((int) e->message.getTimeStamp());
+    CHECK ((times.size() >= 3 && times[0] == 0 && times[1] == 240 + 80 && times[2] == 480), "exported lane is swung the same way");
+}
+
 void feelTests()
 {
     auto proc = makeProcessor();
@@ -1022,6 +1058,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    swingTests();
     feelTests();
     octaveTests();
     strumTests();
