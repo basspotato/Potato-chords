@@ -787,6 +787,25 @@ void songTests()
         if (e->message.isNoteOn() && e->message.getTimeStamp() < 1.0) firstChord.push_back (e->message.getNoteNumber() % 12);
     std::sort (firstChord.begin(), firstChord.end());
     CHECK ((firstChord == Notes { 0, 5, 9 }), "a chorus loops lane bars 5-8");
+
+    // The song is saved with the plugin's state; state from before Song mode loads the Pop template
+    auto proc = makeProcessor();
+    PotatoChordsProcessor::SongState custom { fitToBars (1, 64), 1, 6 };
+    proc->setSong (custom);
+    juce::MemoryBlock state;
+    proc->getStateInformation (state);
+    auto other = makeProcessor();
+    other->setStateInformation (state.getData(), (int) state.getSize());
+    const auto restored = other->getSong();
+    CHECK (restored.song.toString() == custom.song.toString() && restored.templateIndex == 1 && restored.length == 6,
+           "the song, template and length are saved with the plugin");
+
+    auto xml = std::make_unique<juce::XmlElement> (other->apvts.state.getType());
+    xml->setAttribute ("version", 1);
+    juce::MemoryBlock old;
+    juce::AudioProcessor::copyXmlToBinary (*xml, old);
+    other->setStateInformation (old.getData(), (int) old.getSize());
+    CHECK (other->getSong().song.toString() == fromTemplate (0).toString(), "older state without a song loads the Pop template");
 }
 
 void exportVelocityTests()

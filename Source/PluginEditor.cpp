@@ -164,7 +164,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -176,6 +176,36 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
                                       "clicking also puts the chord there. Top-right tags show likely next chords.");
         addAndMakeVisible (*pads[(size_t) i]);
     }
+
+    // Song view: pick a template and a length, then drag sections (or the whole song) into the DAW
+    for (int i = 0; i < pc::song::numTemplates; ++i) songTemplate.addItem (pc::song::templates[(size_t) i].name, i + 1);
+    songLength.addItem ("Template length", 1);
+    for (int half = 4; half <= 12; ++half)
+        songLength.addItem (juce::String (half / 2) + (half % 2 == 1 ? ":30" : ":00") + " min", half);
+    {
+        const auto s = proc.getSong();
+        songTemplate.setSelectedId (s.templateIndex + 1, juce::dontSendNotification);
+        songLength.setSelectedId (s.length >= 4 ? s.length : 1, juce::dontSendNotification);
+    }
+    songTemplate.onChange = [this] { applySongChoice(); };
+    songLength.onChange = [this] { applySongChoice(); };
+    songStrip.onEdit = [this] (const pc::song::Song& s)
+    {
+        auto state = proc.getSong();
+        state.song = s;
+        proc.setSong (state);
+        refresh();
+    };
+    songStrip.makeSectionFile = [this] (int i)
+    {
+        const auto s = proc.getSong().song;
+        if (i < 0 || i >= s.count) return juce::File();
+        const auto name = juce::String::formatted ("Potato-Chords %02d ", i + 1) + pc::song::info (s.sections[(size_t) i].kind).name;
+        return songFile (i, i + 1, name);
+    };
+    dragSong.makeFile = [this] { return songFile (0, pc::song::maxSections, "Potato-Chords song"); };
+    viewTabs.onChange = [this] (int i) { showView (i == 1); };
+    showView (false);
 
     // Plain-words help on hover
     auto tip = [] (juce::SettableTooltipClient& c, const juce::String& text) { c.setTooltip (text); };
@@ -216,6 +246,12 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (panic, "Stops every sounding note. Use it if a note ever gets stuck.");
     tip (keyboard, "Lights up the notes that are playing, in their note colours.");
     tip (logo, "Potato-Chords");
+    tip (viewTabs, "Switch between drawing the melody and laying out a whole song.");
+    tip (songTemplate, "A song shape from Pop and EDM hits: which sections come in what order, and how long each is.");
+    tip (songLength, "Fits the song to a length at the current tempo by stretching intros, choruses and drops, or adding sections.");
+    tip (dragSong, "Drag the whole song into your DAW: chords on one track, melody on another.");
+    tip (songStrip, "Verse-type sections loop bars 1-4 of the progression, chorus-type sections loop bars 5-8. "
+                    "Drag a block into your DAW for that section, right-click to change it.");
 
     // The layout is drawn at 1000 x 910 and scaled as a whole, keeping its shape
     // (read the remembered width first: setting the limits resizes the window, which overwrites it)
@@ -326,6 +362,7 @@ void PotatoChordsEditor::timerCallback() { refresh(); }
 
 void PotatoChordsEditor::refresh()
 {
+    if (songView) songStrip.update (proc.getSong().song);
     undo.setEnabled (proc.canUndo());
     redo.setEnabled (proc.canRedo());
     const int held = proc.heldDegree();
@@ -404,6 +441,7 @@ void PotatoChordsEditor::refresh()
     bool laneHasChords = false;
     for (auto& v : views) laneHasChords = laneHasChords || ! v.empty;
     dragLane.setEnabledLook (laneHasChords);
+    dragSong.setEnabledLook (laneHasChords);
 
     // Display: the live chord, else the lane's, else a hint for what to do
     juce::String idle = keysOn ? "Chord keys on: the white keys C3 to B3 play I to vii. Or tap a pad."
@@ -483,7 +521,6 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     drawCaption (g, "Spread", { 560, flavourY, 60, rowH });
     drawCaption (g, "Sound", { 790, flavourY, 56, rowH });
     drawCaption (g, "Progression", { margin, laneHeadY, 110, rowH });
-    drawCaption (g, "Melody", { margin, melodyHeadY, 110, rowH });
 
 
     // Grooves between sections
@@ -552,6 +589,14 @@ void PotatoChordsEditor::resized()
     dragMelody.setBounds (melodyHead.removeFromRight (130));
     melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 
+    viewTabs.setBounds (margin, melodyHeadY, 112, rowH);
+    auto songHead = juce::Rectangle<int> (margin + 120, melodyHeadY, right - margin - 120, rowH);
+    songTemplate.setBounds (songHead.removeFromLeft (180).reduced (0, 1));
+    songHead.removeFromLeft (8);
+    songLength.setBounds (songHead.removeFromLeft (170).reduced (0, 1));
+    dragSong.setBounds (songHead.removeFromRight (130));
+    songStrip.setBounds (margin, melodyY, right - margin, melodyH);
+
     auto row = juce::Rectangle<int> (margin, displayY, right - margin, displayH);
     dragTake.setBounds (row.removeFromRight (150).reduced (0, 9));
     row.removeFromRight (6);
@@ -570,4 +615,59 @@ void PotatoChordsEditor::resized()
     swingFader.setBounds (chorusFader.getX() - 20 - 112, keyboardY + 3, 112, 26);
     strumFader.setBounds (swingFader.getX() - 8 - 112, keyboardY + 3, 112, 26);
     octave.setBounds (strumFader.getX() - 8 - 186, keyboardY + 3, 186, 26);
+}
+
+// The settings generated MIDI plays with, as the plugin plays it live
+pc::midiexport::Feel PotatoChordsEditor::feel (bool forMelody) const
+{
+    auto value = [this] (const juce::ParameterID& id) { return proc.apvts.getRawParameterValue (id.getParamID())->load(); };
+    pc::midiexport::Feel f;
+    f.key = (int) value (pc::params::key);
+    f.scale = (pc::theory::Scale) (int) value (pc::params::scale);
+    f.spread = (pc::voicing::Spread) (int) value (pc::params::spread);
+    f.bpm = proc.hostBpm();
+    f.barQuarters = proc.barQuarters();
+    f.velocity = (int) value (pc::params::velocity);
+    f.swing = value (pc::params::swing);
+    if (forMelody)
+    {
+        f.channel = PotatoChordsProcessor::melodyChannel;
+        f.octaves = (int) value (pc::params::melodyOctave) - 1;
+    }
+    else
+    {
+        f.channel = PotatoChordsProcessor::chordChannel;
+        f.octaves = (int) value (pc::params::octave) - 2;
+        f.strumSeconds = value (pc::params::strum) * pc::params::strumMaxSeconds;
+    }
+    return f;
+}
+
+juce::File PotatoChordsEditor::songFile (int first, int last, const juce::String& name)
+{
+    return pc::midiexport::writeTemp (pc::midiexport::songToMidi (proc.getSong().song, first, last, proc.lane.snapshot(),
+                                                                  proc.melody.snapshot(), feel (false), feel (true)),
+                                      name);
+}
+
+// A new template or length rebuilds the section list
+void PotatoChordsEditor::applySongChoice()
+{
+    PotatoChordsProcessor::SongState s;
+    s.templateIndex = juce::jmax (0, songTemplate.getSelectedId() - 1);
+    s.length = songLength.getSelectedId() >= 4 ? songLength.getSelectedId() : 0;
+    const int bars = s.length > 0 ? pc::song::barsForMinutes (s.length / 2.0, proc.hostBpm(), proc.barQuarters()) : 0;
+    s.song = bars > 0 ? pc::song::fitToBars (s.templateIndex, bars) : pc::song::fromTemplate (s.templateIndex);
+    proc.setSong (s);
+    refresh();
+}
+
+void PotatoChordsEditor::showView (bool song)
+{
+    songView = song;
+    for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &melodyOctave, &dragMelody, &melodyLane })
+        c->setVisible (! song);
+    for (auto* c : std::initializer_list<juce::Component*> { &songTemplate, &songLength, &dragSong, &songStrip })
+        c->setVisible (song);
+    refresh();
 }

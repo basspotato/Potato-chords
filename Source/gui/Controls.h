@@ -58,6 +58,48 @@ namespace pc::gui
         juce::ParameterAttachment attachment;
     };
 
+    // Buttons that switch between views (not a host parameter); the selected one is lit
+    class TabStrip : public juce::Component, public juce::SettableTooltipClient
+    {
+    public:
+        std::function<void (int)> onChange;
+
+        explicit TabStrip (juce::StringArray labels) : names (std::move (labels)) {}
+
+        int getSelected() const { return selected; }
+        void setSelected (int i) { selected = i; repaint(); }
+
+        void paint (juce::Graphics& g) override
+        {
+            look::inset (g, getLocalBounds().toFloat(), 9.0f);
+            const auto w = (float) getWidth() / (float) names.size();
+            for (int i = 0; i < names.size(); ++i)
+            {
+                auto r = juce::Rectangle<float> (w * (float) i, 0.0f, w, (float) getHeight()).reduced (3.0f, 3.5f);
+                const bool on = i == selected;
+                if (on) look::glow (g, r, 7.0f, colours::notes[5], 0.8f);
+                look::raised (g, r, 7.0f, on ? colours::notes[5].darker (0.35f) : colours::panelLight, on);
+                if (on) r = r.translated (0.0f, 1.5f);
+                g.setFont (look::font (13.5f, true));
+                g.setColour (on ? colours::text : colours::textDim);
+                g.drawText (names[i], r, juce::Justification::centred);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            const int i = juce::jlimit (0, names.size() - 1, (int) ((float) e.x / (float) getWidth() * (float) names.size()));
+            if (i == selected) return;
+            selected = i;
+            repaint();
+            if (onChange) onChange (i);
+        }
+
+    private:
+        juce::StringArray names;
+        int selected = 0;
+    };
+
     // A pill switch with a label for a bool parameter
     class Switch : public juce::Component, public juce::SettableTooltipClient
     {

@@ -91,6 +91,25 @@ public:
     pc::melody::Lane melody;     // the same, for the melody (channel 2)
     int playingMelodyStep() const { return melodyStepShown.load (std::memory_order_relaxed); }
     static constexpr int melodyChannel = 2;
+    // Song mode: the section list the Song view edits and drags out (message thread; locked for state save/load)
+    struct SongState
+    {
+        pc::song::Song song;
+        int templateIndex = 0, length = 0;  // length: 0 = the template's own, else minutes x 2 (5 = 2:30)
+    };
+    SongState getSong() const
+    {
+        const juce::SpinLock::ScopedLockType lock (songLock);
+        return { song, songTemplate, songLength };
+    }
+    void setSong (const SongState& s)
+    {
+        const juce::SpinLock::ScopedLockType lock (songLock);
+        song = s.song;
+        songTemplate = s.templateIndex;
+        songLength = s.length;
+    }
+
     int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
     // Undo for lane and melody edits (message thread only). Call rememberEdit() just before changing either lane.
@@ -126,6 +145,10 @@ private:
         from.pop_back();
     }
     std::vector<Lanes> undoStack, redoStack;
+
+    mutable juce::SpinLock songLock;
+    pc::song::Song song = pc::song::fromTemplate (0);
+    int songTemplate = 0, songLength = 0;
 
     enum class Source { none, pad, key };
 

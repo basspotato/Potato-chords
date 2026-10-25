@@ -6,6 +6,9 @@ namespace
     const juce::Identifier versionProperty { "version" };
     const juce::Identifier progressionProperty { "progression" };
     const juce::Identifier melodyProperty { "melody" };
+    const juce::Identifier songProperty { "song" };
+    const juce::Identifier songTemplateProperty { "songTemplate" };
+    const juce::Identifier songLengthProperty { "songLength" };
 }
 
 PotatoChordsProcessor::PotatoChordsProcessor()
@@ -571,6 +574,12 @@ void PotatoChordsProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (progressionProperty, juce::String (lane.snapshot().toString()), nullptr);
     state.setProperty (melodyProperty, juce::String (melody.snapshot().toString()), nullptr);
+    {
+        const juce::SpinLock::ScopedLockType lock (songLock);
+        state.setProperty (songProperty, juce::String (song.toString()), nullptr);
+        state.setProperty (songTemplateProperty, songTemplate, nullptr);
+        state.setProperty (songLengthProperty, songLength, nullptr);
+    }
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -585,6 +594,14 @@ void PotatoChordsProcessor::setStateInformation (const void* data, int sizeInByt
             state.setProperty (versionProperty, stateVersion, nullptr);
             lane.set (pc::progression::Snapshot::fromString (state[progressionProperty].toString().toStdString()));
             melody.set (pc::melody::Snapshot::fromString (state[melodyProperty].toString().toStdString()));
+            {
+                // State from before Song mode has no song: start from the Pop template
+                const juce::SpinLock::ScopedLockType lock (songLock);
+                songTemplate = juce::jlimit (0, pc::song::numTemplates - 1, (int) state.getProperty (songTemplateProperty, 0));
+                songLength = juce::jmax (0, (int) state.getProperty (songLengthProperty, 0));
+                song = state.hasProperty (songProperty) ? pc::song::Song::fromString (state[songProperty].toString().toStdString())
+                                                        : pc::song::fromTemplate (songTemplate);
+            }
             apvts.replaceState (state);
             flushRequested = true;
         }

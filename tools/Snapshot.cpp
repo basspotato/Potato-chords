@@ -1,8 +1,9 @@
 // Renders the plugin editor to a PNG without a host, so GUI work can be checked headlessly.
 // Usage: PotatoChordsSnapshot out.png [width] [pad] [preset]
 //   width 0 = default; pad 1-7 holds that chord pad (0 = none); preset 1-8 fills the progression lane;
-//   a 5th argument "melody" adds a short demo melody
+//   a 5th argument "melody" adds a short demo melody, "song" shows the Song view
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include "Presets.h"
 
 int main (int argc, char** argv)
@@ -32,6 +33,8 @@ int main (int argc, char** argv)
         proc.processBlock (buffer, midi);
     }
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor->createEditorAndMakeActive());
+    if (argc > 5 && juce::String (argv[5]) == "song")
+        if (auto* e = dynamic_cast<PotatoChordsEditor*> (editor.get())) e->setSongView (true);
     if (argc > 2 && juce::String (argv[2]).getIntValue() > 0)
     {
         const int w = juce::String (argv[2]).getIntValue();

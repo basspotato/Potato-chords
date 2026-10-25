@@ -7,6 +7,7 @@
 #include "gui/PotatoLogo.h"
 #include "gui/ProgressionLane.h"
 #include "gui/MelodyLane.h"
+#include "gui/SongStrip.h"
 #include <optional>
 
 class PotatoChordsEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -18,6 +19,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     float zoom() const;  // window width / layout width
+    void setSongView (bool song) { viewTabs.setSelected (song ? 1 : 0); showView (song); }  // for the snapshot tool
 
 private:
     void timerCallback() override;
@@ -28,6 +30,10 @@ private:
     juce::File laneFile();
     int hintSource() const;
     juce::String statusText() const;
+    pc::midiexport::Feel feel (bool forMelody) const;
+    juce::File songFile (int first, int last, const juce::String& name);
+    void applySongChoice();
+    void showView (bool song);
 
     PotatoChordsProcessor& proc;
     pc::gui::look::LookAndFeel look;
@@ -49,6 +55,11 @@ private:
     pc::gui::ProgressionLane lane;
     pc::gui::MelodyLane melodyLane;
     pc::gui::Keyboard keyboard;
+    pc::gui::TabStrip viewTabs { { "Melody", "Song" } };
+    juce::ComboBox songTemplate, songLength;
+    pc::gui::DragChip dragSong { "Drag song" };
+    pc::gui::SongStrip songStrip;
+    bool songView = false;
 
     juce::TooltipWindow tooltips { this, 600 };
     pc::midiexport::Recorder take;

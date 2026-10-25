@@ -24,6 +24,14 @@ namespace pc::gui::colours
 
     inline juce::Colour forNote (int noteOrPitchClass) { return notes[(size_t) (((noteOrPitchClass % 12) + 12) % 12)]; }
 
+    // Song sections take colours from the note table, one per kind (order matches pc::song::Kind):
+    // intro, verse, pre, chorus, bridge, build, drop, breakdown, outro
+    inline juce::Colour forSection (int kind)
+    {
+        constexpr int pick[9] { 5, 4, 3, 0, 7, 1, 2, 6, 5 };
+        return notes[(size_t) pick[kind < 0 || kind > 8 ? 0 : kind]];
+    }
+
     // Interface colours (not note colours)
     inline const juce::Colour background  { 0xff15122b };  // deep indigo
     inline const juce::Colour backgroundTop    { 0xff221c4a };
