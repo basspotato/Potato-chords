@@ -127,6 +127,16 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         if (! split && selectedSlot == bar * 2 + 1) selectedSlot = bar * 2;
         refresh();
     };
+    lane.flavourNames = pc::params::flavourNames;
+    lane.onFlavour = [this] (int slotIndex, int flavourIndex)
+    {
+        auto slot = proc.lane.slot (slotIndex);
+        if (slot.empty()) return;
+        proc.rememberEdit();
+        slot.flavour = (pc::theory::Flavour) flavourIndex;
+        proc.lane.setSlot (slotIndex, slot);
+        refresh();
+    };
     lane.onClear = [this] (int slot) { proc.rememberEdit(); proc.lane.setSlot (slot, {}); refresh(); };
 
     dragLane.makeFile = [this] { return laneFile(); };

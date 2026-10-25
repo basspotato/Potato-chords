@@ -28,6 +28,8 @@ namespace pc::gui
         std::function<void (int)> onSelect;          // slot index, or -1 to deselect
         std::function<void (int, bool)> onSplit;     // bar, split
         std::function<void (int)> onClear;           // slot index
+        std::function<void (int, int)> onFlavour;    // slot index, flavour index
+        juce::StringArray flavourNames;              // for the right-click menu
 
         void update (const std::array<SlotView, progression::numSlots>& viewsIn, uint8_t splitsIn, int playingIn, int selectedIn)
         {
@@ -168,12 +170,19 @@ namespace pc::gui
             juce::PopupMenu m;
             m.addItem (1, isSplit (bar) ? "One chord in this bar" : "Two chords in this bar");
             m.addItem (2, "Clear this chord", ! views[(size_t) slot].empty);
+            if (! views[(size_t) slot].empty)
+            {
+                juce::PopupMenu types;
+                for (int i = 0; i < flavourNames.size(); ++i) types.addItem (10 + i, flavourNames[i]);
+                m.addSubMenu ("Chord type", types);
+            }
             juce::Component::SafePointer<ProgressionLane> safe (this);
             m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safe, slot, bar] (int result)
             {
                 if (safe == nullptr) return;
                 if (result == 1 && safe->onSplit) safe->onSplit (bar, ! safe->isSplit (bar));
                 if (result == 2 && safe->onClear) safe->onClear (slot);
+                if (result >= 10 && safe->onFlavour) safe->onFlavour (slot, result - 10);
             });
         }
 
