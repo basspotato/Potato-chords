@@ -135,7 +135,7 @@ namespace pc::midiexport
 
     // The melody lane as notes (steps past the end of a short bar, e.g. in 3/4, are left out)
     inline juce::MidiFile melodyToMidi (const melody::Snapshot& tune, int key, theory::Scale scale, double bpm, double barQuarters,
-                                        int channel = melodyChannelDefault, double swing = 0.0)
+                                        int channel = melodyChannelDefault, double swing = 0.0, int octaves = 0)
     {
         using sequencer::stepQuarters;
         const int stepsInBar = juce::jmin (melody::stepsPerBar, (int) std::llround (barQuarters / stepQuarters));
@@ -147,7 +147,7 @@ namespace pc::midiexport
                 const auto c = tune.cell (index);
                 if (c.empty() || c.hold) continue;
                 const int length = juce::jmin (tune.lengthFrom (index), stepsInBar - step);
-                const int note = melody::rowToNote (c.row, key, scale);
+                const int note = melody::rowToNote (c.row, key, scale, octaves);
                 const double on = bar * barQuarters + step * stepQuarters + (step % 2 == 1 ? swing * stepQuarters / 3.0 : 0.0);
                 seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (on));
                 seq.addEvent (juce::MidiMessage::noteOff (channel, note).withTimeStamp (on + length * stepQuarters));

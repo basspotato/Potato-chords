@@ -35,7 +35,7 @@ private:
 
     juce::ComboBox key, sound, presets, rhythm, melodySound;
     juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, soundAttachment, rhythmAttachment, melodySoundAttachment;
-    pc::gui::ChoiceStrip scale, flavour, spread, octave;
+    pc::gui::ChoiceStrip scale, flavour, spread, octave, melodyOctave;
     pc::gui::Switch chordKeys, preview, majorFive, playLane, learn;
     pc::gui::Fader chorusFader, reverbFader, strumFader, velocityFader, humaniseFader, swingFader;
     pc::gui::ActionButton clearLane { "Clear" }, clearMelody { "Clear" }, repeatMelody { "Repeat 1-4" }, exportMidi { "Export .mid" }, panic { "All notes off" },

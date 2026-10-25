@@ -58,10 +58,12 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       octave (param (p, pc::params::octave), pc::params::octaveNames),
       velocityFader (param (p, pc::params::velocity), "Velocity", true),
       humaniseFader (param (p, pc::params::humanise), "Humanise"),
-      swingFader (param (p, pc::params::swing), "Swing")
+      swingFader (param (p, pc::params::swing), "Swing"),
+      melodyOctave (param (p, pc::params::melodyOctave), pc::params::melodyOctaveNames)
 {
     setLookAndFeel (&look);
     octave.setCaption ("Octave", 56);
+    melodyOctave.setCaption ("Octave", 56);
 
     key.addItemList (pc::params::keyNames, 1);
     // Attachments were made before the items existed, so resync the shown selection
@@ -95,7 +97,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         return pc::midiexport::writeTemp (pc::midiexport::melodyToMidi (proc.melody.snapshot(), value (pc::params::key),
                                                                         (pc::theory::Scale) value (pc::params::scale),
                                                                         proc.hostBpm(), proc.barQuarters(), pc::midiexport::melodyChannelDefault,
-                                                                        proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load()),
+                                                                        proc.apvts.getRawParameterValue (pc::params::swing.getParamID())->load(),
+                                                                        value (pc::params::melodyOctave) - 1),
                                           "Potato-Chords melody");
     };
 
@@ -161,7 +164,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -181,6 +184,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (flavour, "How each chord is built. Triad is the plain chord; 7th, sus2, sus4 and add9 add colour; Power is just root and fifth.");
     tip (spread, "Close keeps notes tight together; Wide spreads them out with a low bass note.");
     tip (octave, "Moves every chord up or down whole octaves.");
+    tip (melodyOctave, "Moves the melody up or down an octave, for a low bass line or a high lead.");
     tip (sound, "The built-in sound you hear for chords. It never changes the MIDI sent to your instrument.");
     tip (chordKeys, "On: the white keys C to B in one octave play the 7 chords of the key, so one key plays a whole chord.");
     tip (preview, "Turns the built-in preview sound on or off. Turn it off when your own instrument plays the MIDI.");
@@ -375,7 +379,8 @@ void PotatoChordsEditor::refresh()
         const int keyNow = (int) proc.apvts.getRawParameterValue (pc::params::key.getParamID())->load();
         for (int row = 0; row < pc::melody::numRows; ++row)
         {
-            const int note = pc::melody::rowToNote (row, keyNow, scaleNow);
+            const int note = pc::melody::rowToNote (row, keyNow, scaleNow,
+                                                    (int) proc.apvts.getRawParameterValue (pc::params::melodyOctave.getParamID())->load() - 1);
             mv.rowPitchClass[(size_t) row] = note % 12;
             mv.rowName[(size_t) row] = juce::String (pc::theory::noteName (note, flats)) + juce::String (note / 12 - 2);
         }
@@ -479,10 +484,6 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     drawCaption (g, "Sound", { 790, flavourY, 56, rowH });
     drawCaption (g, "Progression", { margin, laneHeadY, 110, rowH });
     drawCaption (g, "Melody", { margin, melodyHeadY, 110, rowH });
-    g.setFont (look::font (12.5f, false));
-    g.setColour (colours::textDim);
-    g.drawText ("Drag to draw, click a note to delete. Tinted rows = chord notes.",
-                juce::Rectangle<int> (margin + 120 + 200 + 8 + 70 + 108 + 14, melodyHeadY, 290, rowH), juce::Justification::centredLeft);
 
 
     // Grooves between sections
@@ -546,6 +547,8 @@ void PotatoChordsEditor::resized()
     melodyHead.removeFromLeft (8);
     clearMelody.setBounds (melodyHead.removeFromLeft (70));
     repeatMelody.setBounds (melodyHead.removeFromLeft (108));
+    melodyHead.removeFromLeft (14);
+    melodyOctave.setBounds (melodyHead.removeFromLeft (170));
     dragMelody.setBounds (melodyHead.removeFromRight (130));
     melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 

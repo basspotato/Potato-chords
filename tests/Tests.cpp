@@ -737,6 +737,32 @@ void melodyTests()
     proc->setPlayHead (nullptr);
 }
 
+void melodyOctaveTests()
+{
+    CHECK (pc::melody::rowToNote (0, 0, Scale::major, -1) == pc::melody::rowToNote (0, 0, Scale::major) - 12, "melody octave -1 is 12 semitones down");
+    CHECK (pc::melody::rowToNote (13, 11, Scale::major, 5) == 127 && pc::melody::rowToNote (0, 0, Scale::major, -9) == 0, "melody notes stay in the MIDI range");
+
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::melodyOctave, 0.0f);  // -1
+    proc->melody.addNote (0, 4, 0);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    Held held;
+    long clock = 0;
+    const auto t = runTransport (*proc, head, 4, held, clock);
+    bool found = false;
+    for (auto& [pos, note] : t.ons) found = found || note == 60;  // C4: the melody's C5 down an octave
+    CHECK (found, "the melody plays an octave lower with Melody octave -1");
+
+    const auto file = pc::midiexport::melodyToMidi (proc->melody.snapshot(), 0, Scale::major, 120.0, 4.0, 2, 0.0, -1);
+    int first = -1;
+    for (auto* e : *file.getTrack (0))
+        if (e->message.isNoteOn() && first < 0) first = e->message.getNoteNumber();
+    CHECK (first == 60, "exported melody follows Melody octave");
+}
+
 void repeatTests()
 {
     pc::melody::Lane tune;
@@ -1070,6 +1096,7 @@ int main()
     exportTests();
     rhythmTests();
     melodyTests();
+    melodyOctaveTests();
     repeatTests();
     swingTests();
     feelTests();

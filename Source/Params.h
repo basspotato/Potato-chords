@@ -29,6 +29,7 @@ namespace pc::params
     inline const juce::ParameterID octave    { "chordOctave", 1 };
     inline const juce::ParameterID velocity  { "velocity", 1 };
     inline const juce::ParameterID swing     { "swing", 1 };
+    inline const juce::ParameterID melodyOctave { "melodyOctave", 1 };
     inline const juce::ParameterID humanise  { "humanise", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -36,6 +37,7 @@ namespace pc::params
     // Order matches pc::theory::Flavour, pc::voicing::Spread, pc::synth::presets and pc::sequencer::patterns
     inline const juce::StringArray flavourNames { "Triad", "7th", "sus2", "sus4", "add9", "Power" };
     inline const juce::StringArray spreadNames { "Close", "Wide" };
+    inline const juce::StringArray melodyOctaveNames { "-1", "0", "+1" };  // index 1 = no shift
     inline const juce::StringArray octaveNames { "-2", "-1", "0", "+1", "+2" };  // index 2 = no shift
     inline const juce::StringArray soundNames = []
     {
@@ -68,6 +70,7 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
         // Pushes the odd 1/16 steps of the lane and melody late, 0-1
         layout.add (std::make_unique<juce::AudioParameterFloat> (swing, "Swing", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (melodyOctave, "Melody octave", melodyOctaveNames, 1));
         // Velocity of pad, lane and melody notes (chord keys keep the velocity played)
         layout.add (std::make_unique<juce::AudioParameterInt> (velocity, "Velocity", 1, 127, 100));
         // Random velocity and late timing on every generated note, 0-1

@@ -32,10 +32,11 @@ namespace pc::melody
     };
 
     // MIDI note for a row: the key's root around C5, then up the scale
-    constexpr int rowToNote (int row, int key, theory::Scale s)
+    constexpr int rowToNote (int row, int key, theory::Scale s, int octaves = 0)
     {
         const int base = 72 + key - (key > 5 ? 12 : 0);
-        return base + theory::stepToSemitone (s, row);
+        const int note = base + theory::stepToSemitone (s, row) + 12 * octaves;
+        return note < 0 ? 0 : note > 127 ? 127 : note;
     }
 
     struct Snapshot
