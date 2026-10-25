@@ -1,6 +1,6 @@
 # Potato-Chords
 
-VST3 chord sequencer plugin for EDM production: pick a key/scale, build a chord progression from a pattern of steps, and send the resulting MIDI to an instrument (or play it through an optional preview sound). JUCE 8, C++17, CMake. Plan: `BRIEF.md` (to be written after research). Research: `research/reports/`.
+VST3 chord sequencer plugin for EDM production: pick a key/scale, build a chord progression from a pattern of steps, and send the resulting MIDI to an instrument (or play it through an optional preview sound). JUCE 8, C++17, CMake. Plan: `potato-chords-BRIEF.md` (to be written after research). Research: `research/reports/`.
 
 Targets: **Windows 11 x64 VST3 is the priority**. The developer tests in Cubase 15 on Windows 11 (Ryzen 9 9950X). macOS VST3/AU is later and must never block a build or PR.
 
@@ -64,7 +64,7 @@ Source/
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout
 tools/Snapshot.cpp    — headless editor-to-PNG renderer (POTATO_DEV_TOOLS)
-tests/                — headless tests (POTATO_DEV_TOOLS)
+tests/Tests.cpp       — headless tests (POTATO_DEV_TOOLS)
 ```
 
 ## Architecture rules
@@ -89,4 +89,4 @@ tests/                — headless tests (POTATO_DEV_TOOLS)
 
 ## Plugin identity
 
-Manufacturer `Basspotato` / code `Bpot`. Plugin code, product name and bundle ID are TBD (suggested: product `Potato-Chords`, bundle ID `com.basspotato.potatochords`); pick them before the first release and never change them after.
+Manufacturer `Basspotato` / code `Bpot`, plugin code `PtCh`, product `Potato-Chords`, bundle ID `com.basspotato.potatochords`. Never change these after the first release.
