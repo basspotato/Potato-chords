@@ -47,6 +47,11 @@ public:
     // What is sounding now, for the GUI: the held degree (-1 = none) and the chord's MIDI notes
     int heldDegree() const { return activeDegree.load (std::memory_order_relaxed); }
     pc::voicing::Voiced soundingNotes() const;
+    // Every note going out right now (chord and pass-through), for the keyboard
+    bool isNoteSounding (int note) const
+    {
+        return note >= 0 && note < 128 && ((outputNotes[(size_t) note / 64].load (std::memory_order_relaxed) >> (note % 64)) & 1) != 0;
+    }
 
     pc::theory::Chord chordFor (int degree) const;
     bool keyUsesFlats() const;
@@ -107,6 +112,7 @@ private:
     std::atomic<bool> flushRequested { false };
     std::atomic<int> activeDegree { -1 };
     std::atomic<uint64_t> activeNotes { ~uint64_t (0) };
+    std::array<std::atomic<uint64_t>, 2> outputNotes {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PotatoChordsProcessor)
 };

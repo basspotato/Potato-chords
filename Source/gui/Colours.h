@@ -26,6 +26,13 @@ namespace pc::gui::colours
 
     // Interface colours (not note colours)
     inline const juce::Colour background  { 0xff15122b };  // deep indigo
+    inline const juce::Colour backgroundTop    { 0xff221c4a };
+    inline const juce::Colour backgroundBottom { 0xff0d0a1e };
+    inline const juce::Colour chassis     { 0xff1c1738 };  // the raised body of the "device"
+    inline const juce::Colour well        { 0xff120f26 };  // recessed areas
+    inline const juce::Colour screen      { 0xff0b0a1c };  // the display glass
+    inline const juce::Colour whiteKey    { 0xfff2effa };
+    inline const juce::Colour blackKey    { 0xff2a2545 };
     inline const juce::Colour panel       { 0xff221d45 };
     inline const juce::Colour panelLight  { 0xff302a5e };
     inline const juce::Colour outline     { 0xff433b7d };

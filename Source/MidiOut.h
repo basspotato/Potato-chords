@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
+#include <cstdint>
 
 // Note scheduling with hanging-note protection. Every note-on that goes out is counted, so the plugin can
 // always send the matching note-offs (on stop, state load, bypass, chord change).
@@ -40,6 +41,16 @@ namespace pc::midiout
         }
 
         bool isOn (int channel, int note) const { return counts[(size_t) channel - 1][(size_t) note] > 0; }
+
+        // One bit per MIDI note that is on in any channel (bits 0-63 in [0], 64-127 in [1])
+        std::array<uint64_t, 2> noteBits() const
+        {
+            std::array<uint64_t, 2> bits {};
+            for (auto& ch : counts)
+                for (int note = 0; note < 128; ++note)
+                    if (ch[(size_t) note] > 0) bits[(size_t) note / 64] |= uint64_t (1) << (note % 64);
+            return bits;
+        }
 
         int numOn() const
         {

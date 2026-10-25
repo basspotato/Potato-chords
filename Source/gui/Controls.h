@@ -1,6 +1,6 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "Colours.h"
+#include "Look.h"
 
 // Own-look controls bound to host parameters. Kept here so the look can be replaced later.
 namespace pc::gui
@@ -18,17 +18,17 @@ namespace pc::gui
 
         void paint (juce::Graphics& g) override
         {
+            look::inset (g, getLocalBounds().toFloat(), 9.0f);
             const auto w = (float) getWidth() / (float) names.size();
             for (int i = 0; i < names.size(); ++i)
             {
-                auto r = juce::Rectangle<float> (w * (float) i, 0.0f, w, (float) getHeight()).reduced (2.0f);
+                auto r = juce::Rectangle<float> (w * (float) i, 0.0f, w, (float) getHeight()).reduced (3.0f, 3.5f);
                 const bool on = i == selected;
-                g.setColour (on ? colours::accent : colours::panel);
-                g.fillRoundedRectangle (r, 7.0f);
-                g.setColour (on ? colours::text : colours::outline);
-                g.drawRoundedRectangle (r, 7.0f, 1.0f);
+                if (on) look::glow (g, r, 7.0f, colours::accent, 1.0f);
+                look::raised (g, r, 7.0f, on ? colours::accent : colours::panelLight, on);
+                if (on) r = r.translated (0.0f, 1.5f);
+                g.setFont (look::font (14.0f, on));
                 g.setColour (on ? colours::text : colours::textDim);
-                g.setFont (juce::FontOptions (14.0f, on ? juce::Font::bold : juce::Font::plain));
                 g.drawText (names[i], r, juce::Justification::centred);
             }
         }
@@ -58,16 +58,13 @@ namespace pc::gui
 
         void paint (juce::Graphics& g) override
         {
-            auto r = getLocalBounds().toFloat().reduced (2.0f);
-            g.setColour (on ? colours::accent : colours::panel);
-            g.fillRoundedRectangle (r, r.getHeight() / 2.0f);
-            g.setColour (on ? colours::text : colours::outline);
-            g.drawRoundedRectangle (r, r.getHeight() / 2.0f, 1.0f);
-            auto knob = r.removeFromLeft (r.getHeight()).reduced (4.0f);
+            auto r = getLocalBounds().toFloat().reduced (2.0f, 3.0f);
+            look::raised (g, r, 8.0f, colours::panelLight, on);
+            if (on) r = r.translated (0.0f, 1.5f);
+            look::led (g, { r.getX() + 16.0f, r.getCentreY() }, 5.0f, colours::accent, on);
+            g.setFont (look::font (14.0f, on));
             g.setColour (on ? colours::text : colours::textDim);
-            g.fillEllipse (knob);
-            g.setFont (juce::FontOptions (14.0f, on ? juce::Font::bold : juce::Font::plain));
-            g.drawText (label, r.withTrimmedRight (8.0f), juce::Justification::centred);
+            g.drawText (label, r.withTrimmedLeft (28.0f).withTrimmedRight (6.0f), juce::Justification::centred);
         }
 
         void mouseDown (const juce::MouseEvent&) override { attachment.setValueAsCompleteGesture (on ? 0.0f : 1.0f); }

@@ -236,6 +236,9 @@ void PotatoChordsProcessor::publishState()
         packed |= uint64_t (playing.notes[(size_t) i]) << (8 * i);
     }
     activeNotes.store (packed, std::memory_order_relaxed);
+    const auto bits = tracker.noteBits();
+    outputNotes[0].store (bits[0], std::memory_order_relaxed);
+    outputNotes[1].store (bits[1], std::memory_order_relaxed);
 }
 
 void PotatoChordsProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

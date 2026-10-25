@@ -1,6 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Colours.h"
+#include "Look.h"
 #include "Theory.h"
 #include <functional>
 
@@ -34,35 +34,44 @@ namespace pc::gui
 
         void paint (juce::Graphics& g) override
         {
-            auto r = getLocalBounds().toFloat().reduced (4.0f);
+            auto r = getLocalBounds().toFloat().reduced (6.0f, 6.0f).withTrimmedBottom (4.0f);
             const auto rootColour = colours::forNote (chord.root);
 
-            g.setColour (active ? colours::panelLight : colours::panel);
-            g.fillRoundedRectangle (r, 12.0f);
-            g.setColour (active ? rootColour : colours::outline);
-            g.drawRoundedRectangle (r, 12.0f, active ? 3.0f : 1.0f);
+            // Lit pads glow in the root's colour and sit pressed into the panel
+            if (active) look::glow (g, r, 14.0f, rootColour, 1.6f);
+            look::raised (g, r, 14.0f, active ? colours::panel.interpolatedWith (rootColour, 0.22f) : colours::panel.brighter (0.15f), active);
+            if (active) r = r.translated (0.0f, 1.5f);
+            g.setColour (active ? rootColour : rootColour.withAlpha (0.35f));
+            g.drawRoundedRectangle (r.reduced (2.0f), 12.0f, active ? 2.0f : 1.0f);
 
             auto inner = r.reduced (10.0f);
-            g.setColour (rootColour);
-            g.setFont (juce::FontOptions (30.0f, juce::Font::bold));
-            g.drawFittedText (numeral, inner.removeFromTop (40.0f).toNearestInt(), juce::Justification::centred, 1);
-            g.setColour (colours::text);
-            g.setFont (juce::FontOptions (19.0f, juce::Font::bold));
-            g.drawFittedText (name, inner.removeFromTop (28.0f).toNearestInt(), juce::Justification::centred, 1);
+            look::led (g, { inner.getRight() - 4.0f, inner.getY() + 4.0f }, 3.5f, rootColour, active);
 
-            // Colour stripes, lowest chord tone at the bottom, each labelled with its note name
-            inner.removeFromTop (6.0f);
-            const int notes = std::max (1, chord.size);
-            const float h = std::min (24.0f, inner.getHeight() / (float) notes);
-            auto stripes = inner.removeFromBottom (h * (float) notes);
+            g.setFont (look::font (32.0f));
+            look::glowText (g, numeral, inner.removeFromTop (42.0f), rootColour);
+            g.setFont (look::font (19.0f));
+            g.setColour (colours::text);
+            g.drawFittedText (name, inner.removeFromTop (26.0f).toNearestInt(), juce::Justification::centred, 1);
+
+            // Colour stripes as LED bars in a small recessed window, lowest chord tone at the bottom
+            inner.removeFromTop (8.0f);
+            const int count = std::max (1, chord.size);
+            const float h = std::min (24.0f, (inner.getHeight() - 8.0f) / (float) count);
+            auto window = inner.removeFromBottom (h * (float) count + 8.0f);
+            look::inset (g, window, 7.0f);
+            auto stripes = window.reduced (4.0f);
             for (int i = 0; i < chord.size; ++i)
             {
                 const int pc = (chord.root + chord.intervals[(size_t) i]) % 12;
+                const auto c = colours::forNote (pc);
                 auto s = stripes.removeFromBottom (h).reduced (0.0f, 1.5f);
-                g.setColour (colours::forNote (pc));
-                g.fillRoundedRectangle (s, 5.0f);
+                if (active) look::glow (g, s, 4.0f, c, 0.6f);
+                g.setGradientFill (juce::ColourGradient (c.brighter (0.25f), 0.0f, s.getY(), c.darker (0.1f), 0.0f, s.getBottom(), false));
+                g.fillRoundedRectangle (s, 4.0f);
+                g.setColour (juce::Colours::white.withAlpha (0.3f));
+                g.drawHorizontalLine ((int) s.getY() + 1, s.getX() + 4.0f, s.getRight() - 4.0f);
                 g.setColour (colours::onNote);
-                g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+                g.setFont (look::font (13.0f));
                 g.drawText (theory::noteName (pc, flats), s, juce::Justification::centred);
             }
         }

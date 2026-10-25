@@ -46,12 +46,12 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 - The gate is the Windows job: VST3 build plus pluginval at strictness 10, on every push and PR. A Linux job runs headless sequencer/theory tests. A macOS job, if added, is non-blocking.
 - Linux: `xvfb-run -a /tmp/pluginval/pluginval --strictness-level 10 --validate-in-process --validate build/PotatoChords_artefacts/Release/VST3/Potato-Chords.vst3`.
-- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width]` renders the editor to a PNG. Look at it after any GUI change.
+- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width] [pad]` renders the editor to a PNG (width 0 = default; pad 1-7 holds a chord pad). Look at it after any GUI change.
 - Tests: `xvfb-run -a build/PotatoChordsTests` (chord/scale theory, voicing, step timing against host transport, note-off on stop/loop/tempo change, state). Add a test with every sequencer change; never weaken one to pass.
 
 ## Source layout (planned; update as it's built)
 
-Built so far: Params, Theory, Voicing, MidiOut, PreviewSynth, gui/Colours, gui/Controls, gui/ChordPad.
+Built so far: Params, Theory, Voicing, MidiOut, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo.
 
 ```
 Source/
@@ -65,7 +65,11 @@ Source/
   PreviewSynth.h      — built-in 16-voice preview synth (Piano, Soft Piano, E-Piano, Pad, Pluck, Lead)
   gui/Colours.h       — the note-colour table and interface colours (the only place colours live)
   gui/Controls.h      — own-look parameter controls (ChoiceStrip, Switch)
+  gui/Look.h          — 3D drawing helpers (textured background, raised/inset surfaces, glow, LEDs) and LookAndFeel
   gui/ChordPad.h      — one chord pad
+  gui/Display.h       — glass now-playing display
+  gui/Keyboard.h      — coloured keyboard that lights the sounding notes
+  gui/PotatoLogo.h    — smiling potato emblem (from Potato-Kicker)
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout

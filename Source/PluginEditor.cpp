@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 namespace colours = pc::gui::colours;
+namespace look = pc::gui::look;
 
 namespace
 {
@@ -9,16 +10,22 @@ namespace
         return *p.apvts.getParameter (id.getParamID());
     }
 
+    // Engraved caption: a dark shadow under dim text, like printing on a hardware panel
     void drawCaption (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> r)
     {
+        g.setFont (look::font (12.5f));
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawText (text.toUpperCase(), r.translated (0, 1), juce::Justification::centredLeft);
         g.setColour (colours::textDim);
-        g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
         g.drawText (text.toUpperCase(), r, juce::Justification::centredLeft);
     }
 
+    juce::String fromLabel (const pc::theory::Label& l) { return juce::String::fromUTF8 (l.text); }
+
     // Fixed layout rows, shared by paint() and resized()
-    constexpr int margin = 16, topY = 14, topH = 34, flavourY = 64, rowH = 32, padsY = 108, padsH = 236,
-                  fiveY = padsY + padsH + 4, soundY = 392, readoutY = 438;
+    constexpr int width = 900, height = 664, margin = 26, topY = 22, topH = 42, flavourY = 78, rowH = 34,
+                  padsY = 122, padsH = 226, fiveY = padsY + padsH + 2, soundY = 388, displayY = 432, displayH = 56,
+                  keyboardY = 498, keyboardH = 148;
 }
 
 PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
@@ -33,8 +40,6 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       preview (param (p, pc::params::preview), "Preview"),
       majorFive (param (p, pc::params::majorFive), "Major V")
 {
-    look.setColourScheme ({ colours::panel, colours::background, colours::panel, colours::outline, colours::text,
-                            colours::panelLight, colours::text, colours::accent, colours::text });
     setLookAndFeel (&look);
 
     key.addItemList (pc::params::keyNames, 1);
@@ -42,7 +47,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     key.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::key.getParamID())->load(), juce::dontSendNotification);
     key.setTooltip ("Key");
 
-    for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive })
+    for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview,
+                                                            &majorFive, &logo, &display, &keyboard })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -53,7 +59,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         addAndMakeVisible (*pads[(size_t) i]);
     }
 
-    setSize (900, 500);
+    setSize (width, height);
     refresh();
     startTimerHz (30);
 }
@@ -69,97 +75,113 @@ void PotatoChordsEditor::refresh()
 {
     const int held = proc.heldDegree();
     const bool flats = proc.keyUsesFlats();
+    std::array<juce::String, pc::theory::numDegrees> numerals;
     for (int i = 0; i < pc::theory::numDegrees; ++i)
-        pads[(size_t) i]->setChord (proc.chordFor (i), flats, held == i);
+    {
+        const auto chord = proc.chordFor (i);
+        pads[(size_t) i]->setChord (chord, flats, held == i);
+        numerals[(size_t) i] = fromLabel (pc::theory::romanNumeral (chord, i));
+    }
 
     const bool minor = (int) proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load() == 1;
     const bool keysOn = proc.apvts.getRawParameterValue (pc::params::chordKeys.getParamID())->load() > 0.5f;
-    if (minor != minorKey) majorFive.setVisible (minor);
-
-    const auto notes = proc.soundingNotes();
-    const auto name = held >= 0 ? juce::String::fromUTF8 (pc::theory::chordName (proc.chordFor (held), flats).text) : juce::String();
-    if (minor != minorKey || keysOn != chordKeysOn || name != nowPlaying || notes.size != shownNotes.size || notes.notes != shownNotes.notes)
+    if (minor != minorKey)
     {
         minorKey = minor;
-        chordKeysOn = keysOn;
-        nowPlaying = name;
-        shownNotes = notes;
-        repaint (0, soundY - 30, getWidth(), getHeight() - soundY + 30);
+        majorFive.setVisible (minor);
     }
+
+    if (held >= 0)
+    {
+        const auto chord = proc.chordFor (held);
+        display.update (fromLabel (pc::theory::chordName (chord, flats)), numerals[(size_t) held], chord.root,
+                        proc.soundingNotes(), flats, keysOn);
+    }
+    else
+    {
+        display.update ({}, {}, 0, {}, flats, keysOn);
+    }
+
+    std::bitset<128> sounding;
+    for (int note = 0; note < 128; ++note)
+        sounding[(size_t) note] = proc.isNoteSounding (note);
+    keyboard.update (sounding, flats, keysOn, PotatoChordsProcessor::chordKeysLow, numerals);
+
+    logoGlow = held >= 0 ? juce::jmin (1.0f, logoGlow + 0.25f) : logoGlow * 0.85f;
+    logo.setActivity (logoGlow);
 }
 
 void PotatoChordsEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (colours::background);
-    auto area = getLocalBounds().reduced (margin, 0);
+    if (background.isValid()) g.drawImageAt (background, 0, 0);
+    else                      g.fillAll (colours::background);
 
-    // Title in the note colours, one letter per colour
+    // The device body
+    const auto body = getLocalBounds().toFloat().reduced (10.0f, 10.0f);
+    look::raised (g, body, 18.0f, colours::chassis);
+    // Corner screws
+    for (auto c : { body.getTopLeft() + juce::Point<float> (12, 12), body.getTopRight() + juce::Point<float> (-12, 12),
+                    body.getBottomLeft() + juce::Point<float> (12, -12), body.getBottomRight() + juce::Point<float> (-12, -12) })
+    {
+        const auto r = juce::Rectangle<float> (7.0f, 7.0f).withCentre (c);
+        g.setGradientFill (juce::ColourGradient (colours::panelLight.brighter (0.4f), r.getX(), r.getY(), colours::well, r.getRight(), r.getBottom(), false));
+        g.fillEllipse (r);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawLine (r.getX() + 1.5f, r.getCentreY(), r.getRight() - 1.5f, r.getCentreY(), 1.0f);
+    }
+
+    // Title, one letter per note colour, embossed
     const juce::String title ("POTATO-CHORDS");
-    g.setFont (juce::FontOptions (24.0f, juce::Font::bold));
-    float x = (float) margin;
+    g.setFont (look::font (25.0f));
+    float x = 92.0f;
     for (int i = 0; i < title.length(); ++i)
     {
         const auto letter = title.substring (i, i + 1);
-        g.setColour (letter == "-" ? colours::textDim : colours::forNote (i * 7));
-        const float w = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), letter);
-        g.drawText (letter, juce::Rectangle<float> (x, (float) topY, w + 1.0f, (float) topH), juce::Justification::centredLeft);
-        x += w + 1.0f;
+        const float w = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), letter) + 1.0f;
+        const juce::Rectangle<float> r (x, (float) topY, w, (float) topH);
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawText (letter, r.translated (0.0f, 2.0f), juce::Justification::centredLeft, false);
+        look::glowText (g, letter, r, letter == "-" ? colours::textDim : colours::forNote (i * 7), juce::Justification::centredLeft);
+        x += w;
     }
 
     drawCaption (g, "Flavour", { margin, flavourY, 70, rowH });
-    drawCaption (g, "Spread", { 600, flavourY, 64, rowH });
+    drawCaption (g, "Spread", { 618, flavourY, 64, rowH });
     drawCaption (g, "Sound", { margin, soundY, 70, rowH });
 
-    // Now playing: chord name and its notes in their colours
-    auto readout = area.withY (readoutY).withHeight (44);
-    g.setColour (colours::panel);
-    g.fillRoundedRectangle (readout.toFloat(), 10.0f);
-    auto inner = readout.reduced (14, 6);
-    if (nowPlaying.isEmpty())
+    // Grooves between sections
+    for (int y : { flavourY - 7, padsY - 4, soundY - 6 })
     {
-        g.setColour (colours::textDim);
-        g.setFont (juce::FontOptions (15.0f));
-        g.drawText (chordKeysOn ? "Chord keys on: the white keys C3 to B3 (MIDI 60-71) play I to vii. Or tap a pad."
-                                : "Tap a pad to hear its chord.",
-                    inner, juce::Justification::centredLeft);
-        return;
-    }
-
-    g.setColour (colours::text);
-    g.setFont (juce::FontOptions (22.0f, juce::Font::bold));
-    g.drawText (nowPlaying, inner.removeFromLeft (140), juce::Justification::centredLeft);
-    const bool flats = proc.keyUsesFlats();
-    for (int i = 0; i < shownNotes.size; ++i)
-    {
-        const int note = shownNotes.notes[(size_t) i];
-        auto chip = inner.removeFromLeft (52).reduced (3, 2).toFloat();
-        g.setColour (colours::forNote (note));
-        g.fillRoundedRectangle (chip, 8.0f);
-        g.setColour (colours::onNote);
-        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-        // MIDI octave numbering as Cubase shows it (middle C = C3)
-        g.drawText (juce::String (pc::theory::noteName (note, flats)) + juce::String (note / 12 - 2), chip, juce::Justification::centred);
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.drawHorizontalLine (y, (float) margin, (float) (getWidth() - margin));
+        g.setColour (juce::Colours::white.withAlpha (0.05f));
+        g.drawHorizontalLine (y + 1, (float) margin, (float) (getWidth() - margin));
     }
 }
 
 void PotatoChordsEditor::resized()
 {
+    background = look::makeBackground (getWidth(), getHeight());
+
     const int right = getWidth() - margin;
-    auto top = juce::Rectangle<int> (230, topY, right - 230, topH);
-    key.setBounds (top.removeFromLeft (74));
+    logo.setBounds (margin - 4, topY - 6, 66, topH + 12);
+    auto top = juce::Rectangle<int> (318, topY, right - 318, topH);
+    key.setBounds (top.removeFromLeft (76));
     top.removeFromLeft (8);
     scale.setBounds (top.removeFromLeft (170));
-    preview.setBounds (top.removeFromRight (120));
+    preview.setBounds (top.removeFromRight (122));
     top.removeFromRight (8);
-    chordKeys.setBounds (top.removeFromRight (150));
+    chordKeys.setBounds (top.removeFromRight (148));
 
-    flavour.setBounds (margin + 74, flavourY, 480, rowH);
-    spread.setBounds (668, flavourY, right - 668, rowH);
+    flavour.setBounds (margin + 74, flavourY, 500, rowH);
+    spread.setBounds (686, flavourY, right - 686, rowH);
 
     const int padW = (getWidth() - 2 * margin) / pc::theory::numDegrees;
     for (int i = 0; i < pc::theory::numDegrees; ++i)
         pads[(size_t) i]->setBounds (margin + i * padW, padsY, padW, padsH);
-    majorFive.setBounds (margin + 4 * padW + 8, fiveY, padW - 16, 28);
+    majorFive.setBounds (margin + 4 * padW + 10, fiveY, padW - 20, 30);
 
     sound.setBounds (margin + 74, soundY, right - margin - 74, rowH);
+    display.setBounds (margin, displayY, right - margin, displayH);
+    keyboard.setBounds (margin, keyboardY, right - margin, keyboardH);
 }
