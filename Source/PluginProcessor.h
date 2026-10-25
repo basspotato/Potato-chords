@@ -90,6 +90,7 @@ public:
     pc::melody::Lane melody;     // the same, for the melody (channel 2)
     int playingMelodyStep() const { return melodyStepShown.load (std::memory_order_relaxed); }
     static constexpr int melodyChannel = 2;
+    int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
 private:
     enum class Source { none, pad, key };

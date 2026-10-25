@@ -149,10 +149,17 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         addAndMakeVisible (*pads[(size_t) i]);
     }
 
-    setSize (width, height);
+    // The layout is drawn at 1000 x 910 and scaled as a whole, keeping its shape
+    setResizable (true, true);
+    setResizeLimits (width * 7 / 10, height * 7 / 10, width * 8 / 5, height * 8 / 5);
+    getConstrainer()->setFixedAspectRatio ((double) width / height);
+    const int w = juce::jlimit (width * 7 / 10, width * 8 / 5, proc.editorWidth > 0 ? proc.editorWidth : width);
+    setSize (w, (int) std::lround ((double) w * height / width));
     refresh();
     startTimerHz (30);
 }
+
+float PotatoChordsEditor::zoom() const { return (float) getWidth() / (float) width; }
 
 PotatoChordsEditor::~PotatoChordsEditor()
 {
@@ -364,8 +371,10 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     if (background.isValid()) g.drawImageAt (background, 0, 0);
     else                      g.fillAll (colours::background);
 
+    g.addTransform (juce::AffineTransform::scale (zoom()));
+
     // The device body
-    const auto body = getLocalBounds().toFloat().reduced (10.0f, 10.0f);
+    const auto body = juce::Rectangle<float> ((float) width, (float) height).reduced (10.0f, 10.0f);
     look::raised (g, body, 18.0f, colours::chassis);
     // Corner screws
     for (auto c : { body.getTopLeft() + juce::Point<float> (12, 12), body.getTopRight() + juce::Point<float> (-12, 12),
@@ -408,17 +417,21 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     for (int y : { flavourY - 7, padsY - 4, laneHeadY - 6, melodyHeadY - 6, displayY - 6 })
     {
         g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.drawHorizontalLine (y, (float) margin, (float) (getWidth() - margin));
+        g.drawHorizontalLine (y, (float) margin, (float) (width - margin));
         g.setColour (juce::Colours::white.withAlpha (0.05f));
-        g.drawHorizontalLine (y + 1, (float) margin, (float) (getWidth() - margin));
+        g.drawHorizontalLine (y + 1, (float) margin, (float) (width - margin));
     }
 }
 
 void PotatoChordsEditor::resized()
 {
     background = look::makeBackground (getWidth(), getHeight());
+    proc.editorWidth = getWidth();
+    for (auto* c : getChildren())
+        if (c != resizableCorner.get())
+            c->setTransform (juce::AffineTransform::scale (zoom()));
 
-    const int right = getWidth() - margin;
+    const int right = width - margin;
     logo.setBounds (margin - 4, topY - 6, 66, topH + 12);
     auto top = juce::Rectangle<int> (318, topY, right - 318, topH);
     key.setBounds (top.removeFromLeft (76));
@@ -434,7 +447,7 @@ void PotatoChordsEditor::resized()
     spread.setBounds (622, flavourY, 156, rowH);
     sound.setBounds (848, flavourY - 1, right - 848, rowH + 2);
 
-    const int padW = (getWidth() - 2 * margin) / pc::theory::numDegrees;
+    const int padW = (width - 2 * margin) / pc::theory::numDegrees;
     for (int i = 0; i < pc::theory::numDegrees; ++i)
         pads[(size_t) i]->setBounds (margin + i * padW, padsY, padW, padsH);
     majorFive.setBounds (margin + 4 * padW + 10, fiveY, padW - 20, 30);

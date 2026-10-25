@@ -17,6 +17,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    float zoom() const;  // window width / layout width
 
 private:
     void timerCallback() override;
