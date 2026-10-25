@@ -22,7 +22,7 @@ namespace pc::gui
 
     // The 8-bar progression lane. Click a slot to select it (then tap a pad to fill it), click the small
     // split mark to put two chords in a bar, right-click for more. The playing slot glows.
-    class ProgressionLane : public juce::Component
+    class ProgressionLane : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<void (int)> onSelect;          // slot index, or -1 to deselect

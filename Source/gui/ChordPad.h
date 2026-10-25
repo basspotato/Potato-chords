@@ -8,7 +8,7 @@ namespace pc::gui
 {
     // One chord pad: Roman numeral, chord name and one colour stripe per chord note (with its name).
     // Press to play, release to stop.
-    class ChordPad : public juce::Component
+    class ChordPad : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<void (int)> onDown, onUp;

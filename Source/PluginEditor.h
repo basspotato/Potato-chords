@@ -50,6 +50,7 @@ private:
     pc::gui::MelodyLane melodyLane;
     pc::gui::Keyboard keyboard;
 
+    juce::TooltipWindow tooltips { this, 600 };
     pc::midiexport::Recorder take;
     int selectedSlot = -1, lastDegree = -1;
     float logoGlow = 0.0f;

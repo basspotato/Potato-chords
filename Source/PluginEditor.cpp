@@ -158,8 +158,48 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         pads[(size_t) i] = std::make_unique<pc::gui::ChordPad> (i);
         pads[(size_t) i]->onDown = [this] (int degree) { padPressed (degree); };
         pads[(size_t) i]->onUp = [this] (int degree) { proc.padUp (degree); };
+        pads[(size_t) i]->setTooltip ("Hold to hear this chord and send it out as MIDI. With a progression slot selected, "
+                                      "clicking also puts the chord there. Top-right tags show likely next chords.");
         addAndMakeVisible (*pads[(size_t) i]);
     }
+
+    // Plain-words help on hover
+    auto tip = [] (juce::SettableTooltipClient& c, const juce::String& text) { c.setTooltip (text); };
+    tip (key, "The key of your song. The 7 chord pads are the chords that belong to it.");
+    tip (scale, "Major sounds bright and happy. Minor sounds darker and more emotional.");
+    tip (flavour, "How each chord is built. Triad is the plain chord; 7th, sus2, sus4 and add9 add colour; Power is just root and fifth.");
+    tip (spread, "Close keeps notes tight together; Wide spreads them out with a low bass note.");
+    tip (octave, "Moves every chord up or down whole octaves.");
+    tip (sound, "The built-in sound you hear for chords. It never changes the MIDI sent to your instrument.");
+    tip (chordKeys, "On: the white keys C to B in one octave play the 7 chords of the key, so one key plays a whole chord.");
+    tip (preview, "Turns the built-in preview sound on or off. Turn it off when your own instrument plays the MIDI.");
+    tip (learn, "Shows the teaching extras: mood words and next-chord hints.");
+    tip (majorFive, "Uses a major V chord in a minor key. It pulls strongly back to the home chord.");
+    tip (undo, "Undo the last change to the progression or melody.");
+    tip (redo, "Redo the change you just undid.");
+    tip (presets, "Fills the progression with a well-known chord pattern. You can still edit every slot afterwards.");
+    tip (playLane, "On: the progression and melody play along with your DAW's transport.");
+    tip (clearLane, "Empties the progression lane.");
+    tip (rhythm, "The rhythm the progression plays: sustained, pulses, stabs or arpeggios.");
+    tip (exportMidi, "Saves the progression as a .mid file.");
+    tip (dragLane, "Drag this into your DAW to drop the progression on a MIDI track.");
+    tip (lane, "8 bars. Click a slot, then click a chord pad to fill it. The small box on a bar splits it into two chords. Right-click for more.");
+    tip (melodySound, "The built-in sound you hear for the melody.");
+    tip (clearMelody, "Empties the melody lane.");
+    tip (dragMelody, "Drag this into your DAW to drop the melody on a MIDI track.");
+    tip (melodyLane, "Drag right to draw a note, click a note to delete it. Only notes of the key are shown; glowing rows are the chord notes.");
+    tip (display, "Shows the chord that is playing: its name, its number in the key, and its notes.");
+    tip (capture, "Records everything the plugin sends out, so you can drag it into your DAW as a take.");
+    tip (dragTake, "Drag the recorded take into your DAW.");
+    tip (velocityFader, "How hard the pads, progression and melody play.");
+    tip (humaniseFader, "Adds small random changes to velocity and timing so it sounds less robotic.");
+    tip (strumFader, "Rolls each chord in from the lowest note to the highest, like a strummed guitar.");
+    tip (swingFader, "Pushes every second 1/16 note late for a bouncy, shuffled feel.");
+    tip (chorusFader, "Thickens the preview sound. Does not change the MIDI.");
+    tip (reverbFader, "Adds room to the preview sound. Does not change the MIDI.");
+    tip (panic, "Stops every sounding note. Use it if a note ever gets stuck.");
+    tip (keyboard, "Lights up the notes that are playing, in their note colours.");
+    tip (logo, "Potato-Chords");
 
     // The layout is drawn at 1000 x 910 and scaled as a whole, keeping its shape
     // (read the remembered width first: setting the limits resizes the window, which overwrites it)
@@ -448,7 +488,7 @@ void PotatoChordsEditor::resized()
     background = look::makeBackground (getWidth(), getHeight());
     proc.editorWidth = getWidth();
     for (auto* c : getChildren())
-        if (c != resizableCorner.get())
+        if (c != resizableCorner.get() && c != &tooltips)
             c->setTransform (juce::AffineTransform::scale (zoom()));
 
     const int right = width - margin;

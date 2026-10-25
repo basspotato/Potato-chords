@@ -7,7 +7,7 @@ namespace pc::gui
 {
     // Coloured keyboard: every key carries its note colour and name; sounding notes light up and glow.
     // When Chord keys is on, the chord octave is marked with the numeral each white key plays.
-    class Keyboard : public juce::Component
+    class Keyboard : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         static constexpr int lowNote = 36, highNote = 96;  // C1 to C6 in Cubase's naming

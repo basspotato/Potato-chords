@@ -7,7 +7,7 @@ namespace pc::gui
 {
     // The smiling potato emblem from Potato-Kicker, recoloured with this plugin's palette.
     // The eyes glow brighter while a chord plays.
-    class PotatoLogo : public juce::Component
+    class PotatoLogo : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         void setActivity (float a)

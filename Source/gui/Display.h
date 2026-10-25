@@ -6,7 +6,7 @@
 namespace pc::gui
 {
     // Glass display: the chord playing now (name, numeral, its notes as lit chips), or a hint when idle
-    class Display : public juce::Component
+    class Display : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         void update (const juce::String& nameIn, const juce::String& numeralIn, int rootIn, const voicing::Voiced& notesIn,

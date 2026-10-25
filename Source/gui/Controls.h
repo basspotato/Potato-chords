@@ -7,7 +7,7 @@
 namespace pc::gui
 {
     // A row of buttons for a choice parameter; the selected one is lit
-    class ChoiceStrip : public juce::Component
+    class ChoiceStrip : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         ChoiceStrip (juce::RangedAudioParameter& p, juce::StringArray labels)
@@ -59,7 +59,7 @@ namespace pc::gui
     };
 
     // A pill switch with a label for a bool parameter
-    class Switch : public juce::Component
+    class Switch : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         Switch (juce::RangedAudioParameter& p, juce::String labelText)
@@ -90,7 +90,7 @@ namespace pc::gui
 
     // A horizontal fader for a 0-1 parameter: label on the left, percentage on the right.
     // Drag (or click) to set, double-click for the default.
-    class Fader : public juce::Component
+    class Fader : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         // showValue: print the parameter's own value (e.g. a velocity) instead of a percentage
@@ -144,7 +144,7 @@ namespace pc::gui
     };
 
     // A push button in the same raised style
-    class ActionButton : public juce::Component
+    class ActionButton : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<void()> onClick;
@@ -202,7 +202,7 @@ namespace pc::gui
 namespace pc::gui
 {
     // A chip you drag out of the plugin onto a DAW track; `makeFile` writes the MIDI file when the drag starts
-    class DragChip : public juce::Component
+    class DragChip : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<juce::File()> makeFile;
@@ -255,7 +255,7 @@ namespace pc::gui
 namespace pc::gui
 {
     // A latching button with an LED, not tied to a parameter (e.g. Capture)
-    class LedToggle : public juce::Component
+    class LedToggle : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<void (bool)> onChange;

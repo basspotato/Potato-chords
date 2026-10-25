@@ -8,7 +8,7 @@ namespace pc::gui
     // The melody grid: one row per note of the key (two octaves), 16 steps per bar. Click an empty cell and drag
     // right to draw a note; click a note to delete it. Rows that belong to the chord under each bar are tinted,
     // and notes that are in that chord glow in their colour.
-    class MelodyLane : public juce::Component
+    class MelodyLane : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         std::function<void (int, int, int)> onAdd;  // start step, length, row
