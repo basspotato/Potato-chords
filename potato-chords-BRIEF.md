@@ -58,7 +58,7 @@ Bright and vibrant, following Basspotato's palette (yellow → orange → pink �
 | A# | gold-lime | `#DCE036` |
 | B | amber | `#FFC23A` |
 
-C to F come straight from the palette. F# to B are bright greens in the same style, so the octave loops back to yellow (decision pending: the alternative is palette-only, with blue on A). The background stays dark (deep indigo) so the colours pop.
+C to F come straight from the palette. F# to B are bright greens in the same style, so the octave loops back to yellow. The background stays dark (deep indigo) so the colours pop.
 
 ## Build phases
 
