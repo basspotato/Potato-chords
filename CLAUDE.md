@@ -51,7 +51,7 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 ## Source layout (planned; update as it's built)
 
-Built so far: Params, Theory, Voicing, Progression, Presets, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane. Lane playback lives in PluginProcessor (runLane) rather than a separate Sequencer.h.
+Built so far: Params, Theory, Voicing, Progression, Presets, Sequencer, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane. Lane playback lives in PluginProcessor (runLane); Sequencer.h holds the rhythm patterns.
 
 ```
 Source/
@@ -59,7 +59,7 @@ Source/
   Theory.h            — scales, modes, chord construction, diatonic degrees
   Voicing.h           — inversions, spread, voice leading, range limits
   Progression.h       — the 8-bar lane (16 half-bar slots), lock-free atomics, state text form
-  Sequencer.h         — step/pattern playback synced to host PPQ (rhythm, length, gate, swing, strum)
+  Sequencer.h         — lane rhythm patterns on a 1/16 grid (playback itself is runLane in PluginProcessor)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
   Presets.h           — factory progressions and next-chord hints
   MidiExport.h        — Capture recorder and lane-to-MIDI-file export for drag and drop

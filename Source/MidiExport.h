@@ -2,6 +2,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "Progression.h"
 #include "Voicing.h"
+#include "Sequencer.h"
 
 // Turning what the plugin plays into Standard MIDI Files, for drag-and-drop into the DAW.
 // Message thread only (these allocate).
@@ -77,10 +78,12 @@ namespace pc::midiexport
         std::array<int, 16 * 128> held {};
     };
 
-    // The whole progression lane as chords, voiced exactly as the plugin plays it
+    // The whole progression lane, voiced and played with the rhythm pattern exactly as the plugin plays it
     inline juce::MidiFile laneToMidi (const progression::Snapshot& lane, int key, theory::Scale scale, voicing::Spread spread,
-                                      double bpm, double barQuarters, int channel = 1)
+                                      double bpm, double barQuarters, int patternIndex = 0, int channel = 1)
     {
+        using sequencer::stepQuarters;
+        const auto& pattern = sequencer::patterns[(size_t) juce::jlimit (0, sequencer::numPatterns - 1, patternIndex)];
         juce::MidiMessageSequence seq;
         voicing::Voiced previous;
         for (int bar = 0; bar < progression::numBars; ++bar)
@@ -95,10 +98,22 @@ namespace pc::midiexport
                 const auto chord = theory::diatonicChord (key, scale, slot.degree, slot.flavour, slot.majorFive);
                 previous = voicing::closeVoicing (chord, previous);
                 const auto notes = voicing::applySpread (chord, previous, spread);
-                for (int i = 0; i < notes.size; ++i)
+                const int steps = (int) std::llround (length / stepQuarters);
+                for (int step = 0; step < steps; ++step)
                 {
-                    seq.addEvent (juce::MidiMessage::noteOn (channel, notes.notes[(size_t) i], (juce::uint8) 100).withTimeStamp (start));
-                    seq.addEvent (juce::MidiMessage::noteOff (channel, notes.notes[(size_t) i]).withTimeStamp (start + length));
+                    const auto* hit = sequencer::hitStartingAt (pattern, step);
+                    if (hit == nullptr) continue;
+                    const double on = start + step * stepQuarters;
+                    const double off = start + juce::jmin (steps, step + hit->length) * stepQuarters;
+                    auto add = [&] (int note)
+                    {
+                        seq.addEvent (juce::MidiMessage::noteOn (channel, note, (juce::uint8) 100).withTimeStamp (on));
+                        seq.addEvent (juce::MidiMessage::noteOff (channel, note).withTimeStamp (off));
+                    };
+                    if (hit->arp < 0)
+                        for (int i = 0; i < notes.size; ++i) add (notes.notes[(size_t) i]);
+                    else
+                        add (juce::jmin (127, notes.notes[(size_t) (hit->arp % notes.size)] + 12 * (hit->arp / notes.size)));
                 }
             }
         }

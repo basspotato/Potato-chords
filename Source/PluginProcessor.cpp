@@ -23,6 +23,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     soundParam     = apvts.getRawParameterValue (sound.getParamID());
     previewParam   = apvts.getRawParameterValue (preview.getParamID());
     playLaneParam  = apvts.getRawParameterValue (playLane.getParamID());
+    rhythmParam    = apvts.getRawParameterValue (rhythm.getParamID());
 
     out.ensureSize (8192);
 }
@@ -115,6 +116,7 @@ void PotatoChordsProcessor::flushAll (int samplePos)
     tracker.allOff (out, samplePos);
     playing.size = 0;
     lanePlaying.size = 0;
+    laneVoicing.size = 0;
     laneRunning = false;  // the lane restarts its current chord on the next block if the host is playing
     laneCurrent = -1;
     source = Source::none;
@@ -197,14 +199,33 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
     }
 }
 
-void PotatoChordsProcessor::startLaneChord (const pc::progression::Slot& slot, int samplePos)
+void PotatoChordsProcessor::enterLaneSlot (int slotIndex, const pc::progression::Snapshot& snap)
 {
-    stopLaneChord (samplePos);
+    laneCurrent = slotIndex;
+    const auto slot = snap.chordIn (slotIndex);
+    laneCode = slot.encode();
+    laneVoicing.size = 0;
     if (slot.empty()) return;
     const auto chord = pc::theory::diatonicChord (laneSettings.key, (pc::theory::Scale) laneSettings.scale, slot.degree,
                                                   slot.flavour, slot.majorFive);
     lanePreviousClose = pc::voicing::closeVoicing (chord, lanePreviousClose);
-    lanePlaying = pc::voicing::applySpread (chord, lanePreviousClose, (pc::voicing::Spread) laneSettings.spread);
+    laneVoicing = pc::voicing::applySpread (chord, lanePreviousClose, (pc::voicing::Spread) laneSettings.spread);
+}
+
+void PotatoChordsProcessor::startLaneHit (const pc::sequencer::Hit& hit, int samplePos)
+{
+    stopLaneChord (samplePos);
+    if (laneVoicing.size == 0) return;
+    if (hit.arp < 0)
+    {
+        lanePlaying = laneVoicing;
+    }
+    else
+    {
+        // Arp: the n-th chord note, going up an octave each time round
+        lanePlaying.size = 1;
+        lanePlaying.notes[0] = juce::jmin (127, laneVoicing.notes[(size_t) (hit.arp % laneVoicing.size)] + 12 * (hit.arp / laneVoicing.size));
+    }
     for (int i = 0; i < lanePlaying.size; ++i)
         tracker.noteOn (out, chordChannel, lanePlaying.notes[(size_t) i], 100, samplePos);
 }
@@ -216,8 +237,9 @@ void PotatoChordsProcessor::stopLaneChord (int samplePos)
     lanePlaying.size = 0;
 }
 
-// Plays the lane in time with the host: each slot's chord starts on its exact sample, the lane loops every
-// 8 bars from the song start, and a stop, jump, loop wrap or tempo change never leaves a note hanging.
+// Plays the lane in time with the host. The lane loops every 8 bars from the song start; within each chord slot
+// the rhythm pattern fires on a 1/16 grid. Every note lands on its exact sample, and a stop, jump, loop wrap
+// or tempo change never leaves a note hanging.
 void PotatoChordsProcessor::runLane (int numSamples)
 {
     bool playingNow = false;
@@ -246,41 +268,56 @@ void PotatoChordsProcessor::runLane (int numSamples)
         return;
     }
 
+    using pc::sequencer::stepQuarters;
     const double barQ = numerator > 0 && denominator > 0 ? numerator * 4.0 / denominator : 4.0;
     const double loopQ = pc::progression::Snapshot::lengthQuarters (barQ);
     const double ppqPerSample = bpm / 60.0 / sampleRate;
     const double endPpq = ppq + numSamples * ppqPerSample;
     const auto snap = lane.snapshot();
     const auto settings = readSettings();
+    const auto& pattern = pc::sequencer::patterns[(size_t) juce::jlimit (0, pc::sequencer::numPatterns - 1, (int) rhythmParam->load())];
     auto inLoop = [loopQ] (double p) { const double m = std::fmod (p, loopQ); return m < 0.0 ? m + loopQ : m; };
-
-    auto changeTo = [&] (int slotIndex, int samplePos)
+    auto stepInSlot = [&] (double posInLoop, int slotIndex)
     {
-        laneCurrent = slotIndex;
-        const auto chord = snap.chordIn (slotIndex);
-        laneCode = chord.encode();
-        startLaneChord (chord, samplePos);
+        const int bar = slotIndex / 2;
+        const double slotStart = bar * barQ + (slotIndex % 2 == 1 ? barQ * 0.5 : 0.0);
+        return (int) std::floor ((posInLoop - slotStart) / stepQuarters + 1.0e-6);
     };
 
-    // A jump (start, locate, loop wrap by the host, tempo change that moves the position), an edit to the
-    // current slot or a key change: restart the chord at the top of the block
+    // A jump (start, locate, host loop, tempo change that moves the position), an edit to the current slot or a
+    // key change: re-enter the slot and sound whatever the pattern has at this moment
     const bool jumped = ! laneRunning || std::abs (ppq - expectedPpq) > ppqPerSample + 1.0e-6;
     const bool settingsChanged = settings != laneSettings;
     laneSettings = settings;
-    const int now = snap.slotAt (inLoop (ppq + 1.0e-9), barQ);
-    if (jumped || now != laneCurrent || snap.chordIn (now).encode() != laneCode || settingsChanged)
-        changeTo (now, 0);
-
-    // Slot boundaries inside this block, each on its own sample
-    double t = ppq;
-    for (int guard = 0; guard < 64; ++guard)
+    const double startInLoop = inLoop (ppq + 1.0e-9);
+    const int now = snap.slotAt (startInLoop, barQ);
+    const bool restarted = jumped || now != laneCurrent || snap.chordIn (now).encode() != laneCode || settingsChanged;
+    if (restarted)
     {
-        const double posInLoop = inLoop (t + 1.0e-9);
-        const double boundary = (t + 1.0e-9 - posInLoop) + snap.nextBoundary (posInLoop, barQ);
-        if (boundary >= endPpq - 1.0e-12) break;
-        const int samplePos = juce::jlimit (0, numSamples - 1, (int) std::llround ((boundary - ppq) / ppqPerSample));
-        changeTo (snap.slotAt (inLoop (boundary + 1.0e-9), barQ), samplePos);
-        t = boundary;
+        stopLaneChord (0);
+        enterLaneSlot (now, snap);
+        if (const auto* hit = pc::sequencer::hitSoundingAt (pattern, stepInSlot (startInLoop, now)))
+            startLaneHit (*hit, 0);
+    }
+
+    // Grid steps inside this block, each on its own sample
+    double g = std::ceil (ppq / stepQuarters - 1.0e-6) * stepQuarters;
+    if (restarted && g < ppq + 1.0e-6) g += stepQuarters;  // already handled above
+    for (int guard = 0; guard < 512 && g < endPpq - 1.0e-9; ++guard, g += stepQuarters)
+    {
+        const double posInLoop = inLoop (g + 1.0e-9);
+        const int slotIndex = snap.slotAt (posInLoop, barQ);
+        const int samplePos = juce::jlimit (0, numSamples - 1, (int) std::llround ((g - ppq) / ppqPerSample));
+        if (slotIndex != laneCurrent)
+        {
+            stopLaneChord (samplePos);
+            enterLaneSlot (slotIndex, snap);
+        }
+        const int step = stepInSlot (posInLoop, slotIndex);
+        if (const auto* hit = pc::sequencer::hitStartingAt (pattern, step))
+            startLaneHit (*hit, samplePos);
+        else if (pc::sequencer::hitSoundingAt (pattern, step) == nullptr)
+            stopLaneChord (samplePos);
     }
 
     expectedPpq = endPpq;
@@ -357,7 +394,7 @@ void PotatoChordsProcessor::publishState()
     activeDegree.store (source == Source::none ? -1 : currentDegree, std::memory_order_relaxed);
     laneSlot.store (laneRunning ? laneCurrent : -1, std::memory_order_relaxed);
     // The display shows the live chord if there is one, else the lane's chord
-    const auto& shown = playing.size > 0 ? playing : lanePlaying;
+    const auto& shown = playing.size > 0 ? playing : (laneRunning ? laneVoicing : lanePlaying);
     uint64_t packed = ~uint64_t (0);
     for (int i = 0; i < shown.size && i < pc::voicing::maxNotes; ++i)
     {

@@ -10,11 +10,12 @@ namespace pc::gui
     {
     public:
         void update (const juce::String& nameIn, const juce::String& numeralIn, int rootIn, const voicing::Voiced& notesIn,
-                     bool flatsIn, const juce::String& idleIn)
+                     bool flatsIn, const juce::String& idleIn, const juce::String& statusIn)
         {
             if (nameIn == name && numeralIn == numeral && rootIn == root && notesIn.size == notes.size
-                && notesIn.notes == notes.notes && flatsIn == flats && idleIn == idle)
+                && notesIn.notes == notes.notes && flatsIn == flats && idleIn == idle && statusIn == status)
                 return;
+            status = statusIn;
             name = nameIn;
             numeral = numeralIn;
             root = rootIn;
@@ -42,6 +43,13 @@ namespace pc::gui
             g.fillRoundedRectangle (glass.withHeight (glass.getHeight() * 0.5f), 7.0f);
 
             auto inner = glass.reduced (14.0f, 4.0f);
+            if (status.isNotEmpty())
+            {
+                // Transport status in the corner, like a hardware screen's top line
+                g.setFont (look::font (11.5f));
+                const auto c = status.startsWith ("PLAY") ? colours::notes[7] : colours::textDim;
+                look::glowText (g, status, inner.removeFromRight (150.0f), c, juce::Justification::centredRight);
+            }
             if (name.isEmpty())
             {
                 g.setFont (look::font (15.0f, false));
@@ -75,6 +83,6 @@ namespace pc::gui
         int root = 0;
         voicing::Voiced notes;
         bool flats = false;
-        juce::String idle;
+        juce::String idle, status;
     };
 }

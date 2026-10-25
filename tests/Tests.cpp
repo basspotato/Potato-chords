@@ -619,6 +619,48 @@ void exportTests()
     proc->setCapturing (false);
 }
 
+void rhythmTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));
+    Held held;
+    long clock = 0;
+
+    setParam (*proc, pc::params::rhythm, 2.0f);  // offbeat stabs
+    auto t = runTransport (*proc, head, (int) (48000 / blockSize) + 2, held, clock);  // one second = 2 beats
+    std::vector<long> onTimes, offTimes;
+    for (auto& [pos, note] : t.ons) if (std::find (onTimes.begin(), onTimes.end(), pos) == onTimes.end()) onTimes.push_back (pos);
+    for (auto& [pos, note] : t.offs) if (std::find (offTimes.begin(), offTimes.end(), pos) == offTimes.end()) offTimes.push_back (pos);
+    CHECK ((onTimes == std::vector<long> { 12000, 36000 }), "offbeat stabs land on the 'and' of each beat, to the sample");
+    CHECK ((offTimes == std::vector<long> { 18000, 42000 }), "offbeat stabs are a 1/16 note long");
+    CHECK (t.ons.size() == 6, "each stab is the whole triad");
+
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    setParam (*proc, pc::params::rhythm, 5.0f);  // arp up
+    head.playing = true;
+    head.ppq = 0.0;
+    clock = 0;
+    t = runTransport (*proc, head, 24000 / blockSize, held, clock);  // just under one beat
+    Notes arp;
+    for (auto& [pos, note] : t.ons) arp.push_back (note);
+    CHECK ((arp == Notes { 60, 64, 67, 72 }), "arp up plays the chord notes one by one, then the octave");
+    CHECK (held.sounding() <= 1, "arp: one note at a time");
+
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "rhythm patterns: nothing stuck, doubled or stray");
+
+    const auto file = pc::midiexport::laneToMidi (pc::presets::fill (pc::presets::progressions[0], Flavour::triad), 0, Scale::major,
+                                                  pc::voicing::Spread::close, 120.0, 4.0, 3);
+    CHECK (countNoteOns (file) == 8 * 8 * 3, "lane export with 8th pulse: 8 stabs per bar of 3 notes");
+    proc->setPlayHead (nullptr);
+}
+
 void processorTests()
 {
     std::unique_ptr<PotatoChordsProcessor> proc { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
@@ -671,6 +713,7 @@ int main()
     laneModelTests();
     laneTests();
     exportTests();
+    rhythmTests();
     processorTests();
     std::cout << (failures == 0 ? "All tests passed\n" : "Tests failed\n");
     return failures == 0 ? 0 : 1;

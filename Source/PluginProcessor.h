@@ -6,6 +6,7 @@
 #include "MidiOut.h"
 #include "PreviewSynth.h"
 #include "Progression.h"
+#include "Sequencer.h"
 #include "MidiExport.h"
 
 class PotatoChordsProcessor : public juce::AudioProcessor
@@ -103,7 +104,8 @@ private:
     void stopChord (int samplePos);
     void flushAll (int samplePos);
     void runLane (int numSamples);
-    void startLaneChord (const pc::progression::Slot&, int samplePos);
+    void enterLaneSlot (int slotIndex, const pc::progression::Snapshot&);
+    void startLaneHit (const pc::sequencer::Hit&, int samplePos);
     void stopLaneChord (int samplePos);
     void renderPreview (juce::AudioBuffer<float>&);
     void captureOutput (int numSamples);
@@ -118,6 +120,7 @@ private:
     std::atomic<float>* soundParam = nullptr;
     std::atomic<float>* previewParam = nullptr;
     std::atomic<float>* playLaneParam = nullptr;
+    std::atomic<float>* rhythmParam = nullptr;
 
     juce::AbstractFifo padFifo { 64 };
     std::array<int, 64> padEvents {};
@@ -140,7 +143,7 @@ private:
     int laneCurrent = -1;
     uint8_t laneCode = 0;
     Settings laneSettings;
-    pc::voicing::Voiced lanePreviousClose, lanePlaying;
+    pc::voicing::Voiced lanePreviousClose, laneVoicing, lanePlaying;  // voicing of the slot, and the notes sounding now
     bool blockPlaying = false;
     double blockPpq = 0.0, blockBpm = 120.0, freeQuarters = 0.0;
 

@@ -42,13 +42,15 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       proc (p),
       keyAttachment (p.apvts, pc::params::key.getParamID(), key),
       soundAttachment (p.apvts, pc::params::sound.getParamID(), sound),
+      rhythmAttachment (p.apvts, pc::params::rhythm.getParamID(), rhythm),
       scale (param (p, pc::params::scale), pc::params::scaleNames),
       flavour (param (p, pc::params::flavour), pc::params::flavourNames),
       spread (param (p, pc::params::spread), pc::params::spreadNames),
       chordKeys (param (p, pc::params::chordKeys), "Chord keys"),
       preview (param (p, pc::params::preview), "Preview"),
       majorFive (param (p, pc::params::majorFive), "Major V"),
-      playLane (param (p, pc::params::playLane), "Play with host")
+      playLane (param (p, pc::params::playLane), "Play with host"),
+      learn (param (p, pc::params::learn), "Learn")
 {
     setLookAndFeel (&look);
 
@@ -69,6 +71,10 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         sound.addItem (preset.name, i + 1);
     }
     sound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::sound.getParamID())->load(), juce::dontSendNotification);
+
+    for (int i = 0; i < pc::params::rhythmNames.size(); ++i)
+        rhythm.addItem ("Rhythm: " + pc::params::rhythmNames[i], i + 1);
+    rhythm.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::rhythm.getParamID())->load(), juce::dontSendNotification);
 
     presets.setTextWhenNothingSelected ("Starter progressions");
     for (int i = 0; i < (int) pc::presets::progressions.size(); ++i)
@@ -95,15 +101,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     };
     lane.onClear = [this] (int slot) { proc.lane.setSlot (slot, {}); refresh(); };
 
-    dragLane.makeFile = [this]
-    {
-        return pc::midiexport::writeTemp (
-            pc::midiexport::laneToMidi (proc.lane.snapshot(), (int) proc.apvts.getRawParameterValue (pc::params::key.getParamID())->load(),
-                                        (pc::theory::Scale) (int) proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load(),
-                                        (pc::voicing::Spread) (int) proc.apvts.getRawParameterValue (pc::params::spread.getParamID())->load(),
-                                        proc.hostBpm(), proc.barQuarters()),
-            "Potato-Chords progression");
-    };
+    dragLane.makeFile = [this] { return laneFile(); };
+    exportMidi.onClick = [this] { exportLane(); };
     dragTake.makeFile = [this]
     {
         return pc::midiexport::writeTemp (take.toMidiFile (proc.hostBpm(), proc.barQuarters()), "Potato-Chords capture");
@@ -119,7 +118,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     };
 
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
-                                                            &playLane, &presets, &clearLane, &dragLane, &dragTake, &capture,
+                                                            &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard })
         addAndMakeVisible (c);
 
@@ -161,6 +160,36 @@ void PotatoChordsEditor::padPressed (int degree)
     refresh();
 }
 
+juce::File PotatoChordsEditor::laneFile()
+{
+    auto value = [this] (const juce::ParameterID& id) { return (int) proc.apvts.getRawParameterValue (id.getParamID())->load(); };
+    return pc::midiexport::writeTemp (
+        pc::midiexport::laneToMidi (proc.lane.snapshot(), value (pc::params::key), (pc::theory::Scale) value (pc::params::scale),
+                                    (pc::voicing::Spread) value (pc::params::spread), proc.hostBpm(), proc.barQuarters(),
+                                    value (pc::params::rhythm)),
+        "Potato-Chords progression");
+}
+
+// Saves the lane as a .mid file wherever the user picks
+void PotatoChordsEditor::exportLane()
+{
+    const auto source = laneFile();
+    if (! source.existsAsFile()) return;
+    chooser = std::make_unique<juce::FileChooser> ("Export progression as MIDI",
+                                                   juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                                       .getChildFile ("Potato-Chords progression.mid"),
+                                                   "*.mid");
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [source] (const juce::FileChooser& fc)
+                          {
+                              auto target = fc.getResult();
+                              if (target == juce::File()) return;
+                              if (! target.hasFileExtension ("mid")) target = target.withFileExtension ("mid");
+                              source.copyFileTo (target);
+                          });
+}
+
 void PotatoChordsEditor::loadPreset (int index)
 {
     const auto& pr = pc::presets::progressions[(size_t) index];
@@ -188,9 +217,9 @@ int PotatoChordsEditor::hintSource() const
 
 juce::String PotatoChordsEditor::statusText() const
 {
-    if (! proc.hostIsPlaying()) return "Stopped: press play in your DAW";
-    if (proc.playingSlot() < 0) return "Playing (lane off)";
-    return "Playing bar " + juce::String (proc.playingSlot() / 2 + 1) + " of 8";
+    if (! proc.hostIsPlaying()) return "STOPPED";
+    if (proc.playingSlot() < 0) return "PLAYING  (lane off)";
+    return "PLAYING  BAR " + juce::String (proc.playingSlot() / 2 + 1) + " / 8";
 }
 
 void PotatoChordsEditor::timerCallback() { refresh(); }
@@ -202,7 +231,9 @@ void PotatoChordsEditor::refresh()
     const bool minor = (int) proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load() == 1;
     const bool keysOn = proc.apvts.getRawParameterValue (pc::params::chordKeys.getParamID())->load() > 0.5f;
     const auto scaleNow = minor ? pc::theory::Scale::minor : pc::theory::Scale::major;
-    const auto hints = pc::presets::nextChordHints (scaleNow, hintSource());
+    const bool learning = proc.apvts.getRawParameterValue (pc::params::learn.getParamID())->load() > 0.5f;
+    const auto hints = learning ? pc::presets::nextChordHints (scaleNow, hintSource()) : uint8_t (0);
+    const bool majorFiveOn = proc.apvts.getRawParameterValue (pc::params::majorFive.getParamID())->load() > 0.5f;
 
     std::array<juce::String, pc::theory::numDegrees> numerals;
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -210,6 +241,7 @@ void PotatoChordsEditor::refresh()
         const auto chord = proc.chordFor (i);
         pads[(size_t) i]->setChord (chord, flats, held == i);
         pads[(size_t) i]->setHint (((hints >> i) & 1) != 0);
+        pads[(size_t) i]->setMood (learning ? juce::String (pc::presets::moodWord (scaleNow, i, majorFiveOn)) : juce::String());
         numerals[(size_t) i] = fromLabel (pc::theory::romanNumeral (chord, i));
     }
 
@@ -262,8 +294,9 @@ void PotatoChordsEditor::refresh()
         shown = proc.chordFor (slot);
         shownNumeral = fromLabel (pc::theory::romanNumeral (*shown, slot.degree));
     }
-    if (shown) display.update (fromLabel (pc::theory::chordName (*shown, flats)), shownNumeral, shown->root, proc.soundingNotes(), flats, idle);
-    else       display.update ({}, {}, 0, {}, flats, idle);
+    const auto status = statusText();
+    if (shown) display.update (fromLabel (pc::theory::chordName (*shown, flats)), shownNumeral, shown->root, proc.soundingNotes(), flats, idle, status);
+    else       display.update ({}, {}, 0, {}, flats, idle, status);
 
     std::bitset<128> sounding;
     for (int note = 0; note < 128; ++note)
@@ -274,12 +307,6 @@ void PotatoChordsEditor::refresh()
     proc.drainCapture ([this] (const pc::midiexport::CaptureEvent& e) { take.add (e); });
     const int notes = take.numNotes();
     dragTake.setEnabledLook (notes > 0, notes > 0 ? "(" + juce::String (notes) + " notes)" : juce::String());
-
-    if (const auto s = statusText(); s != status)
-    {
-        status = s;
-        repaint (statusArea);
-    }
 
     logoGlow = (held >= 0 || proc.playingSlot() >= 0) ? juce::jmin (1.0f, logoGlow + 0.25f) : logoGlow * 0.85f;
     logo.setActivity (logoGlow);
@@ -324,9 +351,6 @@ void PotatoChordsEditor::paint (juce::Graphics& g)
     drawCaption (g, "Sound", { 790, flavourY, 56, rowH });
     drawCaption (g, "Progression", { margin, laneHeadY, 110, rowH });
 
-    g.setFont (look::font (13.0f, false));
-    g.setColour (proc.hostIsPlaying() ? colours::notes[7] : colours::textDim);
-    g.drawFittedText (status, statusArea, juce::Justification::centred, 1);
 
     // Grooves between sections
     for (int y : { flavourY - 7, padsY - 4, laneHeadY - 6, displayY - 6 })
@@ -347,10 +371,12 @@ void PotatoChordsEditor::resized()
     auto top = juce::Rectangle<int> (318, topY, right - 318, topH);
     key.setBounds (top.removeFromLeft (76));
     top.removeFromLeft (8);
-    scale.setBounds (top.removeFromLeft (170));
-    preview.setBounds (top.removeFromRight (122));
+    scale.setBounds (top.removeFromLeft (160));
+    preview.setBounds (top.removeFromRight (114));
     top.removeFromRight (8);
-    chordKeys.setBounds (top.removeFromRight (148));
+    chordKeys.setBounds (top.removeFromRight (142));
+    top.removeFromRight (8);
+    learn.setBounds (top.removeFromRight (100));
 
     flavour.setBounds (margin + 74, flavourY, 450, rowH);
     spread.setBounds (622, flavourY, 156, rowH);
@@ -362,13 +388,16 @@ void PotatoChordsEditor::resized()
     majorFive.setBounds (margin + 4 * padW + 10, fiveY, padW - 20, 30);
 
     auto head = juce::Rectangle<int> (margin + 120, laneHeadY, right - margin - 120, rowH);
-    presets.setBounds (head.removeFromLeft (270).reduced (0, 1));
+    presets.setBounds (head.removeFromLeft (220).reduced (0, 1));
     head.removeFromLeft (8);
-    playLane.setBounds (head.removeFromLeft (156));
+    playLane.setBounds (head.removeFromLeft (148));
     head.removeFromLeft (8);
-    clearLane.setBounds (head.removeFromLeft (80));
-    dragLane.setBounds (head.removeFromRight (120));
-    statusArea = head.reduced (8, 0);
+    clearLane.setBounds (head.removeFromLeft (70));
+    head.removeFromLeft (8);
+    rhythm.setBounds (head.removeFromLeft (168).reduced (0, 1));
+    dragLane.setBounds (head.removeFromRight (110));
+    head.removeFromRight (8);
+    exportMidi.setBounds (head.removeFromRight (juce::jmin (110, head.getWidth())));
 
     lane.setBounds (margin, laneY, right - margin, laneH);
 

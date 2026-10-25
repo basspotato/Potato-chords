@@ -15,6 +15,12 @@ namespace pc::gui
 
         explicit ChordPad (int degreeIndex) : degree (degreeIndex) {}
 
+        // The mood word under the name (empty hides it)
+        void setMood (const juce::String& m)
+        {
+            if (m != mood) { mood = m; repaint(); }
+        }
+
         // Marks the pad as a good next chord
         void setHint (bool h)
         {
@@ -71,6 +77,12 @@ namespace pc::gui
             g.setFont (look::font (19.0f));
             g.setColour (colours::text);
             g.drawFittedText (name, inner.removeFromTop (26.0f).toNearestInt(), juce::Justification::centred, 1);
+            if (mood.isNotEmpty())
+            {
+                g.setColour (rootColour.withAlpha (0.85f));
+                g.setFont (look::font (12.5f, false));
+                g.drawText (mood, inner.removeFromTop (16.0f), juce::Justification::centred, false);
+            }
 
             // Colour stripes as LED bars in a small recessed window, lowest chord tone at the bottom
             inner.removeFromTop (8.0f);
@@ -102,6 +114,6 @@ namespace pc::gui
         int degree;
         theory::Chord chord;
         bool flats = false, active = false, hint = false;
-        juce::String name, numeral;
+        juce::String name, numeral, mood;
     };
 }

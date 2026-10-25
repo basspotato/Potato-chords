@@ -65,4 +65,14 @@ namespace pc::presets
         if (degree < 0 || degree > 6) return 0;
         return s == theory::Scale::major ? majorHints[degree] : minorHints[degree];
     }
+
+    // One word for how each chord feels in its key, for the teaching display
+    constexpr const char* moodWord (theory::Scale s, int degree, bool majorFive)
+    {
+        constexpr const char* major[7] { "home", "soft", "dreamy", "lift", "pull", "sad", "tense" };
+        constexpr const char* minor[7] { "home", "tense", "bright", "dark", "drift", "epic", "rise" };
+        if (degree < 0 || degree > 6) return "";
+        if (s == theory::Scale::minor && degree == 4 && majorFive) return "pull";
+        return s == theory::Scale::major ? major[degree] : minor[degree];
+    }
 }
