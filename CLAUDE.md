@@ -84,6 +84,7 @@ tests/Tests.cpp       — headless tests (POTATO_DEV_TOOLS)
 ## GUI conventions
 
 - Own look, kept in its own files so it's easy to replace later.
+- Bright, vibrant colours on a dark indigo background. Every note has one fixed colour (C = yellow, E = blue; full table in `potato-chords-BRIEF.md`), used on keys, pads, lanes and labels. Keep the note-colour table in one place in code and never hard-code a note colour elsewhere. Note names always stay visible.
 - Main page = key/scale + chord slots + step pattern grid + transport/sync status. Detail controls (voicing, strum, humanise) on secondary panels.
 - Repaint at a modest rate (about 30 Hz) and keep CPU low.
 
