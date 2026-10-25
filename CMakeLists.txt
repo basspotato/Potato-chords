@@ -53,8 +53,14 @@ target_compile_definitions(PotatoChords PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0)
 
+# The GUI font (Barlow Condensed, SIL OFL, the same as potato-synth), embedded
+juce_add_binary_data(PotatoChordsFonts SOURCES
+    Resources/Fonts/BarlowCondensed-SemiBold.ttf
+    Resources/Fonts/BarlowCondensed-Bold.ttf)
+
 target_link_libraries(PotatoChords
     PRIVATE
+        PotatoChordsFonts
         juce::juce_audio_basics
         juce::juce_audio_processors
         juce::juce_audio_plugin_client
@@ -78,7 +84,7 @@ if(POTATO_DEV_TOOLS)
         target_include_directories(${tool} PRIVATE $<TARGET_PROPERTY:PotatoChords,INCLUDE_DIRECTORIES>)
         target_compile_definitions(${tool} PRIVATE $<TARGET_PROPERTY:PotatoChords,COMPILE_DEFINITIONS>)
         target_compile_options(${tool} PRIVATE $<TARGET_PROPERTY:PotatoChords,COMPILE_OPTIONS>)
-        target_link_libraries(${tool} PRIVATE PotatoChords)
+        target_link_libraries(${tool} PRIVATE PotatoChords PotatoChordsFonts)
     endforeach()
 
     enable_testing()

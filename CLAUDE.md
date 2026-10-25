@@ -65,6 +65,7 @@ Source/
   Presets.h           — factory progressions and next-chord hints
   MidiExport.h        — Capture recorder and lane-to-MIDI-file export for drag and drop
   PreviewSynth.h      — built-in 16-voice preview synth, 25 presets (5 each: Piano, E-Piano, Pad, Pluck, Lead)
+  PreviewFx.h         — chorus and reverb on the preview sound only
   gui/Colours.h       — the note-colour table and interface colours (the only place colours live)
   gui/Controls.h      — own-look parameter controls (ChoiceStrip, Switch)
   gui/Look.h          — 3D drawing helpers (textured background, raised/inset surfaces, glow, LEDs) and LookAndFeel

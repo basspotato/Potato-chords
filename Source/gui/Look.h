@@ -1,14 +1,22 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Colours.h"
+#include <BinaryData.h>
 
 // Drawing helpers for the 3D hardware look: textured background, raised and recessed surfaces, glows, LEDs.
 // Everything visual lives in gui/ so the look can be swapped out later.
 namespace pc::gui::look
 {
+    // Barlow Condensed (the potato-synth font). It reads smaller than the system font at the same height,
+    // so sizes are given as for the system font and scaled here.
     inline juce::Font font (float size, bool bold = true)
     {
-        return juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain);
+        static const juce::Typeface::Ptr boldFace = juce::Typeface::createSystemTypefaceFor (
+            BinaryData::BarlowCondensedBold_ttf, BinaryData::BarlowCondensedBold_ttfSize);
+        static const juce::Typeface::Ptr semiFace = juce::Typeface::createSystemTypefaceFor (
+            BinaryData::BarlowCondensedSemiBold_ttf, BinaryData::BarlowCondensedSemiBold_ttfSize);
+        constexpr float opticalSize = 1.25f;
+        return juce::FontOptions().withTypeface (bold ? boldFace : semiFace).withHeight (size * opticalSize);
     }
 
     // Deep indigo with a fine brushed grain, coloured ambient light and a vignette. Built once per size.
