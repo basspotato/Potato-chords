@@ -181,7 +181,10 @@ void synthTests()
     }
     CHECK (allSound, "every preview preset makes sound");
     CHECK (notTooLoud, "no preview preset is far louder than the rest (7-note chord peak under 1.5)");
-    CHECK (pc::params::soundNames.size() == pc::synth::numPresets && pc::synth::numPresets == 25, "25 sound presets, all named in the parameter");
+    CHECK (pc::params::soundNames.size() == pc::synth::numPresets && pc::synth::numPresets == 75, "75 sound presets, all named in the parameter");
+    CHECK (std::count_if (pc::synth::presets.begin(), pc::synth::presets.end(),
+                          [] (const auto& p) { return std::string (p.group) == "Song Writer" && p.section != nullptr; }) == 50,
+           "50 Song Writer sounds, each in a section");
     CHECK (allFinite, "preview output is always finite");
     CHECK (allStop, "every preview sound goes quiet after release");
 

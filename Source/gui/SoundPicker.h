@@ -37,7 +37,9 @@ namespace pc::gui
 
             g.setFont (look::font (10.5f));
             g.setColour (tint.withAlpha (0.9f));
-            g.drawText (juce::String (preset.group).toUpperCase(), mid.removeFromTop (mid.getHeight() * 0.38f),
+            auto heading = juce::String (preset.group).toUpperCase();
+            if (preset.section != nullptr) heading << "  " << juce::String (preset.section).toUpperCase();
+            g.drawText (heading, mid.removeFromTop (mid.getHeight() * 0.38f),
                         juce::Justification::bottomLeft, true);
             g.setFont (look::font (14.0f));
             g.setColour (colours::text);
@@ -64,7 +66,10 @@ namespace pc::gui
     private:
         static juce::Colour groupColour (int index)
         {
-            return colours::notes[(size_t) (index / synth::presetsPerGroup * 5 + 1) % colours::notes.size()];  // 5 apart: no two groups share a colour
+            int group = 0;
+            for (int i = 1; i <= index; ++i)
+                group += juce::String (synth::presets[(size_t) i].group) != synth::presets[(size_t) i - 1].group ? 1 : 0;
+            return colours::notes[(size_t) (group * 5 + 1) % colours::notes.size()];  // 5 apart: no two groups share a colour
         }
 
         void drawArrow (juce::Graphics& g, juce::Rectangle<float> r, int direction, bool hot) const
@@ -117,6 +122,8 @@ namespace pc::gui
                     flush();
                     groupName = preset.group;
                 }
+                if (preset.section != nullptr && (i == 0 || synth::presets[(size_t) i - 1].section != preset.section))
+                    group.addSectionHeader (preset.section);
                 group.addItem (i + 1, preset.name, true, i == selected);
             }
             flush();
