@@ -29,7 +29,8 @@ namespace pc::writer
         int weight;                  // how common the loop is in hits
     };
 
-    // The research catalogue's 16 loops that fit the v1 chord set (no borrowed chords)
+    // The research catalogue's loops that fit the v1 chord set (no borrowed chords), plus more common diatonic ones.
+    // Append only: the song ideas refer to loops by index.
     namespace detail
     {
         constexpr auto P = bit (Style::pop), PE = bit (Style::popEdm), C = bit (Style::edmClub), D = bit (Style::deepHouse),
@@ -37,7 +38,7 @@ namespace pc::writer
         constexpr auto Br = bit (Mood::bright), Em = bit (Mood::emotional), Dk = bit (Mood::dark), Ep = bit (Mood::epic),
                        Ch = bit (Mood::chill);
         using theory::Scale;
-        inline constexpr std::array<Loop, 16> loops {{
+        inline constexpr std::array<Loop, 31> loops {{
             { "I-V-vi-IV",    Scale::major, 4, { 0, 4, 5, 3 }, 0, P | PE | C,  Br | Em | Ep, 10 },
             { "vi-IV-I-V",    Scale::major, 4, { 5, 3, 0, 4 }, 0, P | PE | C,  Em | Ch,      9 },
             { "I-vi-IV-V",    Scale::major, 4, { 0, 5, 3, 4 }, 0, P,           Br | Ch,      5 },
@@ -54,6 +55,21 @@ namespace pc::writer
             { "i-iv-VI-V",    Scale::minor, 4, { 0, 3, 5, 4 }, 0b1000, T | C,  Dk | Ep,      5 },
             { "i-VII-VI-V",   Scale::minor, 4, { 0, 6, 5, 4 }, 0b1000, P | C,  Dk,           4 },
             { "i-iv",         Scale::minor, 2, { 0, 3, 0, 0 }, 0, D | C,       Dk | Ch,      6 },
+            { "I-IV-vi-V",    Scale::major, 4, { 0, 3, 5, 4 }, 0, P | PE,      Br | Em,      5 },
+            { "vi-V-IV-V",    Scale::major, 4, { 5, 4, 3, 4 }, 0, P | PE | C,  Em | Ep,      4 },
+            { "I-V-IV",       Scale::major, 3, { 0, 4, 3, 0 }, 0, P | C,       Br,           3 },
+            { "vi-IV-V-I",    Scale::major, 4, { 5, 3, 4, 0 }, 0, P | PE | T,  Em | Ch,      4 },
+            { "ii-V-I-vi",    Scale::major, 4, { 1, 4, 0, 5 }, 0, D | P,       Ch | Em,      3 },
+            { "IV-I-vi-V",    Scale::major, 4, { 3, 0, 5, 4 }, 0, PE | P | C,  Br | Em,      4 },
+            { "I-vi-ii-V",    Scale::major, 4, { 0, 5, 1, 4 }, 0, D | P | C,   Br | Ch,      4 },
+            { "i-III-VI-VII", Scale::minor, 4, { 0, 2, 5, 6 }, 0, PE | C | T,  Ep | Em,      6 },
+            { "i-VI-iv-v",    Scale::minor, 4, { 0, 5, 3, 4 }, 0, T | P,       Dk | Em,      4 },
+            { "i-iv-III-VII", Scale::minor, 4, { 0, 3, 2, 6 }, 0, PE | C,      Dk | Ch,      4 },
+            { "i-VII-iv",     Scale::minor, 3, { 0, 6, 3, 0 }, 0, D | C,       Dk | Ch,      3 },
+            { "i-III-iv",     Scale::minor, 3, { 0, 2, 3, 0 }, 0, D | C,       Ch | Dk,      3 },
+            { "i-v-VI-iv",    Scale::minor, 4, { 0, 4, 5, 3 }, 0, P | PE,      Em | Dk,      4 },
+            { "i-VI-VII-iv",  Scale::minor, 4, { 0, 5, 6, 3 }, 0, T | C,       Ep | Dk,      4 },
+            { "i-VII",        Scale::minor, 2, { 0, 6, 0, 0 }, 0, D | C | T,   Dk | Ch,      5 },
         }};
     }
     inline constexpr const auto& loops = detail::loops;
@@ -127,11 +143,11 @@ namespace pc::writer
         int loop = 0;                      // which catalogue loop the chorus uses
     };
 
-    // Rhythm and chord colour by style (two choices each, picked by the dice)
+    // Rhythm and chord colour by style (four choices each, picked by the dice)
     constexpr int rhythmFor (Style s, int pick)
     {
-        constexpr int table[numStyles][2] { { 1, 3 }, { 4, 2 }, { 2, 8 }, { 8, 2 }, { 6, 5 } };
-        return table[(int) s][pick & 1];
+        constexpr int table[numStyles][4] { { 1, 3, 7, 5 }, { 4, 2, 3, 8 }, { 2, 8, 6, 3 }, { 8, 2, 4, 7 }, { 6, 5, 9, 10 } };
+        return table[(int) s][pick & 3];
     }
 
     constexpr theory::Flavour flavourFor (Style s, int pick, bool lastChord)
@@ -139,11 +155,11 @@ namespace pc::writer
         using theory::Flavour;
         switch (s)
         {
-            case Style::popEdm:    return pick % 2 == 0 ? Flavour::seventh : Flavour::add9;
-            case Style::deepHouse: return Flavour::seventh;
-            case Style::trance:    return lastChord && pick % 2 == 0 ? Flavour::sus2 : Flavour::triad;
-            case Style::pop:
-            case Style::edmClub:   break;
+            case Style::pop:       return pick == 3 ? Flavour::add9 : Flavour::triad;
+            case Style::popEdm:    return pick == 0 ? Flavour::seventh : pick == 1 ? Flavour::add9 : pick == 2 ? Flavour::sus2 : Flavour::triad;
+            case Style::edmClub:   return pick == 3 ? Flavour::power : Flavour::triad;
+            case Style::deepHouse: return pick == 3 ? Flavour::add9 : Flavour::seventh;
+            case Style::trance:    return lastChord && pick % 2 == 0 ? Flavour::sus2 : pick == 3 ? Flavour::add9 : Flavour::triad;
         }
         return Flavour::triad;
     }
@@ -222,8 +238,8 @@ namespace pc::writer
         const bool slowVamp = style == Style::deepHouse && dice.below (2) == 0;
         const auto chorus = expand (loop, 0, slowVamp);
         const auto verse = verseFrom (loop, chorus, slowVamp, dice);
-        const int colourPick = dice.below (2);
-        r.rhythm = rhythmFor (style, dice.below (2));
+        const int colourPick = dice.below (4);
+        r.rhythm = rhythmFor (style, dice.below (4));
         putBars (r.lane, 0, verse, style, colourPick);
         putBars (r.lane, 4, chorus, style, colourPick);
         r.lane.splits = 0;

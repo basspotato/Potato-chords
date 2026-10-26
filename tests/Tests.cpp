@@ -931,7 +931,7 @@ void writerTests()
                     filled = filled && ! slot.empty() && r.lane.slot (bar * 2 + 1).empty();
                     auto& half = bar < 4 ? verse : chorus;
                     half.degree[(size_t) bar % 4] = slot.degree;
-                    if (style == Style::deepHouse) deepSevenths = deepSevenths && slot.flavour == pc::theory::Flavour::seventh;
+                    if (style == Style::deepHouse) deepSevenths = deepSevenths && (slot.flavour == pc::theory::Flavour::seventh || slot.flavour == pc::theory::Flavour::add9);
                 }
                 const auto fast = expand (loop, 0, false), slow = expand (loop, 0, true);
                 chorusIsLoop = chorusIsLoop && (chorus.degree == fast.degree || chorus.degree == slow.degree);
@@ -951,7 +951,7 @@ void writerTests()
     CHECK (oneChange, "writer: bars 1-4 (verse) change at most one thing: a rotation or one swapped chord");
     CHECK (homeOk, "writer: a verse with a swapped chord still leads home and has no ping-pong");
     CHECK (darkMinor && brightPopMajor, "writer: dark moods write in minor, bright pop in major");
-    CHECK (deepSevenths, "writer: deep house is coloured with 7ths");
+    CHECK (deepSevenths, "writer: deep house is coloured with 7ths or add9");
     CHECK (rhythmOk, "writer: the rhythm is a real pattern");
     CHECK (repeatable, "writer: the same seed always gives the same progression");
     bool varied = true;
