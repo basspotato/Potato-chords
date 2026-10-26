@@ -1126,6 +1126,47 @@ void ideaTests()
     CHECK (distinct, "ideas: no two ideas are the same");
 }
 
+// Saved state must survive being loaded from anywhere: empty, truncated, garbage, or a project with wrong values
+void stateRobustnessTests()
+{
+    auto proc = makeProcessor();
+    proc->lane.set (pc::presets::fill (pc::presets::progressions[0], Flavour::triad));
+    proc->melody.set (pc::melodywriter::write (proc->lane.snapshot(), Scale::major, pc::melodywriter::Shape::singAlong,
+                                               pc::melodywriter::Busy::medium, 5));
+    juce::MemoryBlock good;
+    proc->getStateInformation (good);
+
+    auto other = makeProcessor();
+    other->setStateInformation (nullptr, 0);
+    const char junk[] = "this is not a plugin state";
+    other->setStateInformation (junk, (int) sizeof (junk));
+    other->setStateInformation (good.getData(), (int) good.getSize() / 2);  // truncated
+    runBlock (*other, {});
+    CHECK (true, "state: empty, garbage and truncated data load without crashing");
+
+    other->setStateInformation (good.getData(), (int) good.getSize());
+    CHECK (other->lane.snapshot().toString() == proc->lane.snapshot().toString()
+           && other->melody.snapshot().cells == proc->melody.snapshot().cells, "state: a good save restores the lane and melody exactly");
+
+    // A project saved with out-of-range values (wrong lane text, absurd song, bad tempo) is clamped, not trusted
+    auto xml = std::make_unique<juce::XmlElement> (other->apvts.state.getType());
+    xml->setAttribute ("version", 1);
+    xml->setAttribute ("progression", "zz");
+    xml->setAttribute ("melody", "ff");
+    xml->setAttribute ("song", "99:999 1:0 3:-4");
+    xml->setAttribute ("songTemplate", 99);
+    xml->setAttribute ("songLength", -5);
+    xml->setAttribute ("songBpm", 99999);
+    juce::MemoryBlock bad;
+    juce::AudioProcessor::copyXmlToBinary (*xml, bad);
+    other->setStateInformation (bad.getData(), (int) bad.getSize());
+    const auto song = other->getSong();
+    CHECK (song.templateIndex >= 0 && song.templateIndex < pc::song::numTemplates && song.length >= 0 && song.bpm <= pc::song::maxBpm,
+           "state: out-of-range song settings are clamped");
+    CHECK (other->getSong().song.count == 0 || other->getSong().song.totalBars() > 0, "state: a broken song never has zero-length sections");
+    runBlock (*other, {});
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1504,6 +1545,7 @@ int main()
     keyboardClickTests();
     melodyWriterTests();
     ideaTests();
+    stateRobustnessTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();
