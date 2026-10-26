@@ -41,9 +41,9 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     : AudioProcessorEditor (p),
       proc (p),
       keyAttachment (p.apvts, pc::params::key.getParamID(), key),
-      soundAttachment (p.apvts, pc::params::sound.getParamID(), sound),
       rhythmAttachment (p.apvts, pc::params::rhythm.getParamID(), rhythm),
-      melodySoundAttachment (p.apvts, pc::params::melodySound.getParamID(), melodySound),
+      sound (param (p, pc::params::sound)),
+      melodySound (param (p, pc::params::melodySound)),
       scale (param (p, pc::params::scale), pc::params::scaleNames),
       flavour (param (p, pc::params::flavour), pc::params::flavourNames),
       spread (param (p, pc::params::spread), pc::params::spreadNames),
@@ -70,24 +70,6 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     key.addItemList (pc::params::keyNames, 1);
     // Attachments were made before the items existed, so resync the shown selection
     key.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::key.getParamID())->load(), juce::dontSendNotification);
-
-    // Sound presets grouped by type under headings
-    for (auto* box : { &sound, &melodySound })
-    {
-        const char* group = "";
-        for (int i = 0; i < pc::synth::numPresets; ++i)
-        {
-            const auto& preset = pc::synth::presets[(size_t) i];
-            if (juce::String (preset.group) != group)
-            {
-                group = preset.group;
-                box->addSectionHeading (group);
-            }
-            box->addItem (preset.name, i + 1);
-        }
-    }
-    sound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::sound.getParamID())->load(), juce::dontSendNotification);
-    melodySound.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::melodySound.getParamID())->load(), juce::dontSendNotification);
 
     melodyLane.onAdd = [this] (int start, int length, int row) { proc.rememberEdit(); proc.melody.addNote (start, length, row); refresh(); };
     melodyLane.onRemove = [this] (int step) { proc.rememberEdit(); proc.melody.removeNote (step); refresh(); };
@@ -475,6 +457,7 @@ void PotatoChordsEditor::refresh()
     const bool linked = proc.apvts.getRawParameterValue (pc::params::linkMelody.getParamID())->load() > 0.5f;
     melodyOctave.setEnabled (! linked);
     melodySound.setEnabled (! linked);
+    melodySound.setAlpha (linked ? 0.4f : 1.0f);
     melodyOctave.setAlpha (linked ? 0.4f : 1.0f);
     redo.setEnabled (proc.canRedo());
     const int held = proc.heldDegree();

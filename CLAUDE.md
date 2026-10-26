@@ -81,6 +81,7 @@ Source/
   gui/MelodyLane.h    — the melody grid
   gui/SongStrip.h     — the Song view: section blocks, each dragged out as its own MIDI
   gui/WriterPanel.h   — the Write panels (two choice rows, Write, optional Complete)
+  gui/SoundPicker.h   — sound picker: arrows, group colour chip, menu with a sub-menu per group
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout

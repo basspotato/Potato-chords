@@ -4,6 +4,7 @@
 #include "gui/Controls.h"
 #include "gui/Display.h"
 #include "gui/Keyboard.h"
+#include "gui/SoundPicker.h"
 #include "gui/PotatoLogo.h"
 #include "gui/ProgressionLane.h"
 #include "gui/MelodyLane.h"
@@ -47,8 +48,9 @@ private:
     pc::gui::look::LookAndFeel look;
     juce::Image background;
 
-    juce::ComboBox key, sound, presets, rhythm, melodySound;
-    juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, soundAttachment, rhythmAttachment, melodySoundAttachment;
+    juce::ComboBox key, presets, rhythm;
+    juce::AudioProcessorValueTreeState::ComboBoxAttachment keyAttachment, rhythmAttachment;
+    pc::gui::SoundPicker sound, melodySound;
     pc::gui::ChoiceStrip scale, flavour, spread, octave, melodyOctave;
     pc::gui::Switch chordKeys, preview, majorFive, playLane, learn, playSong, linkMelody;
     pc::gui::Fader chorusFader, reverbFader, strumFader, velocityFader, humaniseFader, swingFader;
