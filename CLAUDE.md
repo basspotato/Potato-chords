@@ -46,20 +46,42 @@ cmake --build build --target PotatoChords_VST3 PotatoChordsSnapshot PotatoChords
 
 - The gate is the Windows job: VST3 build plus pluginval at strictness 10, on every push and PR. A Linux job runs headless sequencer/theory tests. A macOS job, if added, is non-blocking.
 - Linux: `xvfb-run -a /tmp/pluginval/pluginval --strictness-level 10 --validate-in-process --validate build/PotatoChords_artefacts/Release/VST3/Potato-Chords.vst3`.
-- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width]` renders the editor to a PNG. Look at it after any GUI change.
+- GUI check without a host: `xvfb-run -a build/PotatoChordsSnapshot shot.png [width] [pad]` renders the editor to a PNG (width 0 = default; then optional pad 1-7 to hold, and preset 1-8 to fill the lane). Look at it after any GUI change.
 - Tests: `xvfb-run -a build/PotatoChordsTests` (chord/scale theory, voicing, step timing against host transport, note-off on stop/loop/tempo change, state). Add a test with every sequencer change; never weaken one to pass.
 
 ## Source layout (planned; update as it's built)
+
+Built so far: Params, Theory, Voicing, Progression, Melody, Presets, Sequencer, MidiOut, MidiExport, PreviewSynth, gui/Colours, gui/Look, gui/Controls, gui/ChordPad, gui/Display, gui/Keyboard, gui/PotatoLogo, gui/ProgressionLane, gui/MelodyLane. Lane playback lives in PluginProcessor (runLane); Sequencer.h holds the rhythm patterns.
 
 ```
 Source/
   Params.h            — every APVTS parameter ID, range and default (single source of truth)
   Theory.h            — scales, modes, chord construction, diatonic degrees
   Voicing.h           — inversions, spread, voice leading, range limits
-  Progression.h       — chord slots / progression model
-  Sequencer.h         — step/pattern playback synced to host PPQ (rhythm, length, gate, swing, strum)
+  Progression.h       — the 8-bar lane (16 half-bar slots), lock-free atomics, state text form
+  Melody.h            — the melody lane: 8 bars x 16 steps, scale rows only, plays on MIDI channel 2
+  Song.h              — Song mode: section templates (Pop, Pop-EDM, EDM club), fit to a length
+  Writer.h            — Write a chord progression (16-loop catalogue by style and mood) and Complete empty bars
+  MelodyWriter.h      — Write a melody over the lane (Sing-along, Riff, Arp, Whoop; question/answer phrases)
+  Ideas.h             — 12 song ideas: key, chords, rhythm, melody, song template and tempo in one click
+  Sequencer.h         — lane rhythm patterns on a 1/16 grid (playback itself is runLane in PluginProcessor)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
-  Presets.h           — factory progressions/patterns
+  Presets.h           — factory progressions and next-chord hints
+  MidiExport.h        — Capture recorder and lane-to-MIDI-file export for drag and drop
+  PreviewSynth.h      — built-in 16-voice preview synth, 25 presets (5 each: Piano, E-Piano, Pad, Pluck, Lead)
+  PreviewFx.h         — chorus and reverb on the preview sound only
+  gui/Colours.h       — the note-colour table and interface colours (the only place colours live)
+  gui/Controls.h      — own-look parameter controls (ChoiceStrip, Switch)
+  gui/Look.h          — 3D drawing helpers (textured background, raised/inset surfaces, glow, LEDs) and LookAndFeel
+  gui/ChordPad.h      — one chord pad
+  gui/Display.h       — glass now-playing display
+  gui/Keyboard.h      — coloured keyboard that lights the sounding notes
+  gui/PotatoLogo.h    — smiling potato emblem (from Potato-Kicker)
+  gui/ProgressionLane.h — the lane editor
+  gui/MelodyLane.h    — the melody grid
+  gui/SongStrip.h     — the Song view: section blocks, each dragged out as its own MIDI
+  gui/WriterPanel.h   — the Write panels (two choice rows, Write, optional Complete)
+  gui/SoundPicker.h   — sound picker: arrows, group colour chip, menu with a sub-menu per group
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout
