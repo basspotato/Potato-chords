@@ -11,6 +11,8 @@
 // Pure and allocation-free; the MIDI side is in MidiExport.h.
 namespace pc::song
 {
+    constexpr int minBpm = 40, maxBpm = 250;  // the Song view's tempo field
+
     enum class Kind { intro, verse, pre, chorus, bridge, build, drop, breakdown, outro };
     constexpr int numKinds = 9;
 

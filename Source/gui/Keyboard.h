@@ -2,6 +2,7 @@
 #include "Look.h"
 #include "Theory.h"
 #include <bitset>
+#include <functional>
 
 namespace pc::gui
 {
@@ -11,6 +12,12 @@ namespace pc::gui
     {
     public:
         static constexpr int lowNote = 36, highNote = 96;  // C1 to C6 in Cubase's naming
+        std::function<void (int)> onNoteDown, onNoteUp;     // a key clicked with the mouse (drag to slide across keys)
+
+        void mouseDown (const juce::MouseEvent& e) override { press (noteAt (e.position)); }
+        void mouseDrag (const juce::MouseEvent& e) override { if (const int n = noteAt (e.position); n != held) press (n); }
+        void mouseUp (const juce::MouseEvent&) override { press (-1); }
+        void release() { press (-1); }  // let go of a clicked key (the editor closing mid-click)
 
         // Returns true when something changed, so the caller only repaints then
         void update (const std::bitset<128>& sounding, bool flatsIn, bool chordKeysOn, int chordLow,
@@ -64,6 +71,32 @@ namespace pc::gui
 
     private:
         static bool isBlack (int note) { return theory::whiteKeyDegree (note) < 0; }
+
+        void press (int note)
+        {
+            if (held >= 0 && onNoteUp) onNoteUp (held);
+            held = note;
+            if (held >= 0 && onNoteDown) onNoteDown (held);
+        }
+
+        // Black keys sit on top, so they are checked first
+        int noteAt (juce::Point<float> p) const
+        {
+            if (! keys.contains (p)) return -1;
+            const float w = whiteWidth(), bw = w * 0.62f;
+            if (p.y < keys.getY() + keys.getHeight() * 0.6f)
+                for (int note = lowNote; note <= highNote; ++note)
+                    if (isBlack (note))
+                    {
+                        const float x = keyX (note) + w - bw / 2.0f;
+                        if (p.x >= x && p.x < x + bw) return note;
+                    }
+            for (int note = lowNote; note <= highNote; ++note)
+                if (! isBlack (note) && p.x >= keyX (note) && p.x < keyX (note) + w) return note;
+            return -1;
+        }
+
+        int held = -1;
 
         static int whiteIndex (int note)
         {

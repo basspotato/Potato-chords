@@ -9,6 +9,7 @@ namespace
     const juce::Identifier songProperty { "song" };
     const juce::Identifier songTemplateProperty { "songTemplate" };
     const juce::Identifier songLengthProperty { "songLength" };
+    const juce::Identifier songBpmProperty { "songBpm" };
 }
 
 PotatoChordsProcessor::PotatoChordsProcessor()
@@ -178,10 +179,51 @@ void PotatoChordsProcessor::flushAll (int samplePos)
 
 void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKeysOn, bool padsOn)
 {
-    // Pad events have no timing of their own, so they land at the start of the block
+    auto noteOn = [&] (int ch, int note, juce::uint8 velocity, int pos)
+    {
+        if (chordKeysOn && note >= chordKeysLow && note < chordKeysLow + 12)
+        {
+            const int degree = pc::theory::whiteKeyDegree (note);
+            if (degree >= 0)
+            {
+                playChord (degree, velocity, pos);
+                source = Source::key;
+                triggerChannel = ch;
+                triggerNote = note;
+            }
+            return;  // black keys in the chord octave do nothing
+        }
+        tracker.noteOn (out, ch, note, velocity, pos);
+        auto& count = passHeld[(size_t) ch - 1][(size_t) note];
+        if (count < 255) ++count;
+    };
+    auto noteOff = [&] (int ch, int note, int pos)
+    {
+        // Matched by what the note-on did, not the current mode, so toggling Chord keys never strands a note
+        if (source == Source::key && ch == triggerChannel && note == triggerNote)
+        {
+            stopChord (pos);
+            source = Source::none;
+            currentDegree = -1;
+        }
+        else if (auto& count = passHeld[(size_t) ch - 1][(size_t) note]; count > 0)
+        {
+            tracker.noteOff (out, ch, note, pos);
+            --count;
+        }
+    };
+
+    // Pad and key clicks have no timing of their own, so they land at the start of the block
     const auto scope = padFifo.read (padFifo.getNumReady());
     auto handlePad = [&] (int event)
     {
+        if (std::abs (event) >= keyEventBase)
+        {
+            const int note = std::abs (event) - keyEventBase;
+            if (event > 0) noteOn (1, note, noteVelocity(), 0);
+            else           noteOff (1, note, 0);
+            return;
+        }
         if (! padsOn) return;
         const int degree = std::abs (event) - 1;
         if (degree < 0 || degree >= pc::theory::numDegrees) return;
@@ -206,40 +248,9 @@ void PotatoChordsProcessor::handleMidi (const juce::MidiBuffer& in, bool chordKe
         const int pos = meta.samplePosition;
 
         if (msg.isNoteOn())
-        {
-            const int ch = msg.getChannel(), note = msg.getNoteNumber();
-            if (chordKeysOn && note >= chordKeysLow && note < chordKeysLow + 12)
-            {
-                const int degree = pc::theory::whiteKeyDegree (note);
-                if (degree >= 0)
-                {
-                    playChord (degree, msg.getVelocity(), pos);
-                    source = Source::key;
-                    triggerChannel = ch;
-                    triggerNote = note;
-                }
-                continue;  // black keys in the chord octave do nothing
-            }
-            tracker.noteOn (out, ch, note, msg.getVelocity(), pos);
-            auto& count = passHeld[(size_t) ch - 1][(size_t) note];
-            if (count < 255) ++count;
-        }
+            noteOn (msg.getChannel(), msg.getNoteNumber(), msg.getVelocity(), pos);
         else if (msg.isNoteOff())
-        {
-            const int ch = msg.getChannel(), note = msg.getNoteNumber();
-            // Matched by what the note-on did, not the current mode, so toggling Chord keys never strands a note
-            if (source == Source::key && ch == triggerChannel && note == triggerNote)
-            {
-                stopChord (pos);
-                source = Source::none;
-                currentDegree = -1;
-            }
-            else if (auto& count = passHeld[(size_t) ch - 1][(size_t) note]; count > 0)
-            {
-                tracker.noteOff (out, ch, note, pos);
-                --count;
-            }
-        }
+            noteOff (msg.getChannel(), msg.getNoteNumber(), pos);
         else if (msg.isAllNotesOff() || msg.isAllSoundOff())
         {
             flushAll (pos);
@@ -623,6 +634,7 @@ void PotatoChordsProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.setProperty (songProperty, juce::String (song.toString()), nullptr);
         state.setProperty (songTemplateProperty, songTemplate, nullptr);
         state.setProperty (songLengthProperty, songLength, nullptr);
+        state.setProperty (songBpmProperty, songBpm, nullptr);
     }
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -643,6 +655,7 @@ void PotatoChordsProcessor::setStateInformation (const void* data, int sizeInByt
                 const juce::SpinLock::ScopedLockType lock (songLock);
                 songTemplate = juce::jlimit (0, pc::song::numTemplates - 1, (int) state.getProperty (songTemplateProperty, 0));
                 songLength = juce::jmax (0, (int) state.getProperty (songLengthProperty, 0));
+                songBpm = juce::jlimit (0, pc::song::maxBpm, (int) state.getProperty (songBpmProperty, 0));
                 song = state.hasProperty (songProperty) ? pc::song::Song::fromString (state[songProperty].toString().toStdString())
                                                         : pc::song::fromTemplate (songTemplate);
                 songLane.set (song);

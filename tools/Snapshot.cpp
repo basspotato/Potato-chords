@@ -35,6 +35,8 @@ int main (int argc, char** argv)
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor->createEditorAndMakeActive());
     if (argc > 5 && juce::String (argv[5]) == "song")
         if (auto* e = dynamic_cast<PotatoChordsEditor*> (editor.get())) e->setSongView (true);
+    if (argc > 5 && juce::String (argv[5]) == "write")
+        if (auto* e = dynamic_cast<PotatoChordsEditor*> (editor.get())) e->showWriter();
     if (argc > 2 && juce::String (argv[2]).getIntValue() > 0)
     {
         const int w = juce::String (argv[2]).getIntValue();

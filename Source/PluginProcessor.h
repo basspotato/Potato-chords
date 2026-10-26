@@ -48,6 +48,9 @@ public:
     // Chord pads (message thread). Events reach the audio thread through a lock-free FIFO.
     void padDown (int degree) { pushPadEvent (degree + 1); }
     void padUp (int degree)   { pushPadEvent (-(degree + 1)); }
+    // A key clicked on the on-screen keyboard: handled like a MIDI note coming in on channel 1 (so Chord keys works too)
+    void keyDown (int note) { if (note >= 0 && note < 128) pushPadEvent (keyEventBase + note); }
+    void keyUp (int note)   { if (note >= 0 && note < 128) pushPadEvent (-(keyEventBase + note)); }
 
     // All notes off at the start of the next block (any thread)
     void panic() { flushRequested = true; }
@@ -96,11 +99,12 @@ public:
     {
         pc::song::Song song;
         int templateIndex = 0, length = 0;  // length: 0 = the template's own, else minutes x 2 (5 = 2:30)
+        int bpm = 0;                        // the song's tempo for fitting and MIDI files; 0 = follow the host
     };
     SongState getSong() const
     {
         const juce::SpinLock::ScopedLockType lock (songLock);
-        return { song, songTemplate, songLength };
+        return { song, songTemplate, songLength, songBpm };
     }
     void setSong (const SongState& s)
     {
@@ -108,10 +112,12 @@ public:
         song = s.song;
         songTemplate = s.templateIndex;
         songLength = s.length;
+        songBpm = s.bpm;
         songLane.set (s.song);
     }
     int playingSection() const { return sectionShown.load (std::memory_order_relaxed); }  // -1 when not playing a song
 
+    int writerStyle = 0, writerMood = 0;  // the Write panel's last choice (message thread only)
     int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
     // Undo for lane and melody edits (message thread only). Call rememberEdit() just before changing either lane.
@@ -150,7 +156,7 @@ private:
 
     mutable juce::SpinLock songLock;
     pc::song::Song song = pc::song::fromTemplate (0);
-    int songTemplate = 0, songLength = 0;
+    int songTemplate = 0, songLength = 0, songBpm = 0;
 
     enum class Source { none, pad, key };
 
@@ -166,6 +172,7 @@ private:
     };
 
     Settings readSettings() const;
+    static constexpr int keyEventBase = 1000;  // pad FIFO events: +-(degree + 1) for pads, +-(1000 + note) for keys
     void pushPadEvent (int event);
     void handleMidi (const juce::MidiBuffer& in, bool chordKeysOn, bool padsOn);
     void playChord (int degree, juce::uint8 velocity, int samplePos);

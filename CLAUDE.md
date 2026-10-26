@@ -61,6 +61,7 @@ Source/
   Progression.h       — the 8-bar lane (16 half-bar slots), lock-free atomics, state text form
   Melody.h            — the melody lane: 8 bars x 16 steps, scale rows only, plays on MIDI channel 2
   Song.h              — Song mode: section templates (Pop, Pop-EDM, EDM club), fit to a length
+  Writer.h            — Write a chord progression (16-loop catalogue by style and mood) and Complete empty bars
   Sequencer.h         — lane rhythm patterns on a 1/16 grid (playback itself is runLane in PluginProcessor)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
   Presets.h           — factory progressions and next-chord hints
@@ -77,6 +78,7 @@ Source/
   gui/ProgressionLane.h — the lane editor
   gui/MelodyLane.h    — the melody grid
   gui/SongStrip.h     — the Song view: section blocks, each dragged out as its own MIDI
+  gui/WriterPanel.h   — the Write panel (style, mood, Write, Complete)
   gui/                — own look; replaceable later
   PluginProcessor.*   — audio/MIDI thread, parameter handling, state save/load
   PluginEditor.*      — GUI layout

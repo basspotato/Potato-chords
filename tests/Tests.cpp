@@ -5,6 +5,8 @@
 #include "Voicing.h"
 #include "PreviewSynth.h"
 #include "Presets.h"
+#include "Writer.h"
+#include <set>
 #include <cstring>
 #include <map>
 #include <iostream>
@@ -790,15 +792,15 @@ void songTests()
 
     // The song is saved with the plugin's state; state from before Song mode loads the Pop template
     auto proc = makeProcessor();
-    PotatoChordsProcessor::SongState custom { fitToBars (1, 64), 1, 6 };
+    PotatoChordsProcessor::SongState custom { fitToBars (1, 64), 1, 6, 128 };
     proc->setSong (custom);
     juce::MemoryBlock state;
     proc->getStateInformation (state);
     auto other = makeProcessor();
     other->setStateInformation (state.getData(), (int) state.getSize());
     const auto restored = other->getSong();
-    CHECK (restored.song.toString() == custom.song.toString() && restored.templateIndex == 1 && restored.length == 6,
-           "the song, template and length are saved with the plugin");
+    CHECK (restored.song.toString() == custom.song.toString() && restored.templateIndex == 1 && restored.length == 6 && restored.bpm == 128,
+           "the song, template, length and tempo are saved with the plugin");
 
     auto xml = std::make_unique<juce::XmlElement> (other->apvts.state.getType());
     xml->setAttribute ("version", 1);
@@ -878,6 +880,125 @@ void songPlaybackTests()
     play (blockSize);
     CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "song play: stop releases everything");
     proc->setPlayHead (nullptr);
+}
+
+void writerTests()
+{
+    using namespace pc::writer;
+    bool catalogueOk = true;
+    for (const auto& l : loops)
+    {
+        catalogueOk = catalogueOk && l.length >= 2 && l.length <= 4 && l.styles != 0 && l.moods != 0 && l.weight > 0;
+        for (int i = 0; i < l.length; ++i) catalogueOk = catalogueOk && l.degrees[(size_t) i] >= 0 && l.degrees[(size_t) i] < 7;
+        catalogueOk = catalogueOk && leadsHome (l.scale, l.degrees[(size_t) l.length - 1], l.degrees[0]);
+    }
+    CHECK (catalogueOk, "writer: every catalogue loop is in the key and leads back to its first chord");
+
+    bool filled = true, chorusIsLoop = true, oneChange = true, darkMinor = true, brightPopMajor = true, deepSevenths = true,
+         rhythmOk = true, repeatable = true, homeOk = true;
+    std::set<std::string> variety[numStyles];
+    for (int st = 0; st < numStyles; ++st)
+        for (int mo = 0; mo < numMoods; ++mo)
+            for (uint32_t seed = 0; seed < 200; ++seed)
+            {
+                const auto style = (Style) st;
+                const auto mood = (Mood) mo;
+                const auto r = write (style, mood, seed);
+                const auto& loop = loops[(size_t) r.loop];
+                repeatable = repeatable && write (style, mood, seed).lane.toString() == r.lane.toString();
+                variety[st].insert (r.lane.toString());
+                rhythmOk = rhythmOk && r.rhythm >= 0 && r.rhythm < pc::sequencer::numPatterns;
+                filled = filled && r.lane.splits == 0 && r.scale == loop.scale;
+                Bars verse, chorus;
+                for (int bar = 0; bar < 8; ++bar)
+                {
+                    const auto slot = r.lane.slot (bar * 2);
+                    filled = filled && ! slot.empty() && r.lane.slot (bar * 2 + 1).empty();
+                    auto& half = bar < 4 ? verse : chorus;
+                    half.degree[(size_t) bar % 4] = slot.degree;
+                    if (style == Style::deepHouse) deepSevenths = deepSevenths && slot.flavour == pc::theory::Flavour::seventh;
+                }
+                const auto fast = expand (loop, 0, false), slow = expand (loop, 0, true);
+                chorusIsLoop = chorusIsLoop && (chorus.degree == fast.degree || chorus.degree == slow.degree);
+                // The verse is the chorus, a rotation of the loop, or the chorus with one chord swapped
+                bool rotation = false;
+                for (int rot = 0; rot < loop.length; ++rot)
+                    rotation = rotation || verse.degree == expand (loop, rot, false).degree || verse.degree == expand (loop, rot, true).degree;
+                int differences = 0;
+                for (int k = 0; k < 4; ++k) differences += verse.degree[(size_t) k] != chorus.degree[(size_t) k] ? 1 : 0;
+                oneChange = oneChange && (rotation || differences <= 1);
+                if (! rotation) homeOk = homeOk && leadsHome (r.scale, verse.degree[3], verse.degree[0]) && ! pingPong (verse);
+                if (mood == Mood::dark) darkMinor = darkMinor && r.scale == Scale::minor;
+                if (mood == Mood::bright && style == Style::pop) brightPopMajor = brightPopMajor && r.scale == Scale::major;
+            }
+    CHECK (filled, "writer: all 8 bars get a chord, in the loop's scale");
+    CHECK (chorusIsLoop, "writer: bars 5-8 (chorus) are the catalogue loop itself");
+    CHECK (oneChange, "writer: bars 1-4 (verse) change at most one thing: a rotation or one swapped chord");
+    CHECK (homeOk, "writer: a verse with a swapped chord still leads home and has no ping-pong");
+    CHECK (darkMinor && brightPopMajor, "writer: dark moods write in minor, bright pop in major");
+    CHECK (deepSevenths, "writer: deep house is coloured with 7ths");
+    CHECK (rhythmOk, "writer: the rhythm is a real pattern");
+    CHECK (repeatable, "writer: the same seed always gives the same progression");
+    bool varied = true;
+    for (auto& v : variety) varied = varied && v.size() >= 6;
+    CHECK (varied, "writer: the dice give every style plenty of different results");
+
+    // Complete keeps the user's chords and fills the rest of the half from a loop that agrees with them
+    pc::progression::Snapshot mine;
+    mine.slots[0] = pc::progression::Slot { 0, Flavour::add9, false }.encode();  // I
+    mine.slots[2] = pc::progression::Slot { 4, Flavour::add9, false }.encode();  // V
+    const auto done = complete (mine, Scale::major, Style::pop, Mood::bright, 1);
+    Notes degrees;
+    for (int bar = 0; bar < 8; ++bar) degrees.push_back (done.slot (bar * 2).degree);
+    CHECK ((degrees == Notes { 0, 4, 5, 3, 5, 3, 0, 4 }), "complete: I V _ _ becomes I-V-vi-IV, and the empty half its rotation vi-IV-I-V");
+    CHECK (done.slot (4).flavour == Flavour::add9, "complete: new chords take the colour of the user's chords");
+
+    const auto full = pc::presets::fill (pc::presets::progressions[0], Flavour::triad);
+    CHECK (complete (full, Scale::major, Style::pop, Mood::bright, 3).toString() == full.toString(), "complete: a full lane is left alone");
+
+    const auto fresh = complete ({}, Scale::minor, Style::pop, Mood::bright, 5);
+    bool allMinorLoop = true;
+    for (int bar = 0; bar < 8; ++bar) allMinorLoop = allMinorLoop && ! fresh.slot (bar * 2).empty();
+    CHECK (allMinorLoop && fresh.slot (8).degree >= 0, "complete: an empty lane is written in the lane's scale");
+    bool inMinor = false;
+    for (const auto& l : loops) if (l.scale == Scale::minor && expand (l, 0, false).degree[0] == fresh.slot (8).degree) inMinor = true;
+    CHECK (inMinor, "complete: an empty minor lane gets a minor loop");
+
+    // Unusual chords that no loop fits still get a filled bar (from the next-chord hints)
+    pc::progression::Snapshot odd;
+    odd.slots[0] = pc::progression::Slot { 6, Flavour::triad, false }.encode();
+    odd.slots[2] = pc::progression::Slot { 1, Flavour::triad, false }.encode();
+    const auto oddDone = complete (odd, Scale::major, Style::pop, Mood::bright, 0);
+    bool oddFilled = true;
+    for (int bar = 0; bar < 8; ++bar) oddFilled = oddFilled && ! oddDone.slot (bar * 2).empty();
+    CHECK (oddFilled && oddDone.slot (0).degree == 6 && oddDone.slot (2).degree == 1, "complete: chords outside the catalogue are kept and the gaps filled");
+}
+
+// Keys clicked on the on-screen keyboard play like incoming MIDI
+void keyboardClickTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::chordKeys, 0.0f);
+    Held held;
+    proc->keyDown (64);
+    auto out = runBlock (*proc, {});
+    held.add (out);
+    CHECK ((noteOnsIn (out) == Notes { 64 }) && held.sounding() == 1, "a clicked key plays its note");
+    proc->keyUp (64);
+    held.add (runBlock (*proc, {}));
+    CHECK (held.sounding() == 0 && held.strayOffs == 0, "letting go of the key stops it");
+
+    setParam (*proc, pc::params::chordKeys, 1.0f);
+    proc->keyDown (PotatoChordsProcessor::chordKeysLow);  // C in the chord octave
+    out = runBlock (*proc, {});
+    held.add (out);
+    CHECK (noteOnsIn (out).size() == 3, "with Chord keys on, a clicked key in the chord octave plays its chord");
+    setParam (*proc, pc::params::chordKeys, 0.0f);
+    proc->keyUp (PotatoChordsProcessor::chordKeysLow);
+    held.add (runBlock (*proc, {}));
+    CHECK (held.sounding() == 0 && held.strayOffs == 0 && held.doubledOns == 0, "the clicked chord stops even if Chord keys was turned off meanwhile");
 }
 
 void exportVelocityTests()
@@ -1254,6 +1375,8 @@ int main()
     melodyTests();
     songTests();
     songPlaybackTests();
+    writerTests();
+    keyboardClickTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();
