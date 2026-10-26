@@ -1,33 +1,37 @@
 #pragma once
 #include "Controls.h"
-#include "../Writer.h"
 
-// The Write panel: pick a style and a mood, then Write a whole progression or Complete the empty bars
+// A Write panel: two choice rows (style and mood, or shape and busyness), a Write button and an optional
+// Complete button. Used for writing a progression and for writing a melody.
 namespace pc::gui
 {
     class WriterPanel : public juce::Component
     {
     public:
-        std::function<void (writer::Style, writer::Mood)> onWrite, onComplete;
+        std::function<void (int, int)> onWrite, onComplete, onChoice;  // the two choices
         std::function<void()> onClose;
 
-        WriterPanel()
+        WriterPanel (juce::String titleText, juce::String firstLabel, juce::StringArray firstNames, juce::String secondLabel,
+                     juce::StringArray secondNames, juce::String completeText = {})
+            : title (std::move (titleText)), labelA (std::move (firstLabel)), labelB (std::move (secondLabel)),
+              first (std::move (firstNames)), second (std::move (secondNames)), complete (completeText)
         {
-            for (auto* c : std::initializer_list<juce::Component*> { &style, &mood, &write, &complete, &close })
+            for (auto* c : std::initializer_list<juce::Component*> { &first, &second, &write, &close })
                 addAndMakeVisible (c);
-            write.onClick = [this] { if (onWrite) onWrite (getStyle(), getMood()); };
-            complete.onClick = [this] { if (onComplete) onComplete (getStyle(), getMood()); };
+            addChildComponent (complete);
+            complete.setVisible (completeText.isNotEmpty());
+            write.onClick = [this] { if (onWrite) onWrite (first.getSelected(), second.getSelected()); };
+            complete.onClick = [this] { if (onComplete) onComplete (first.getSelected(), second.getSelected()); };
             close.onClick = [this] { if (onClose) onClose(); };
-            style.onChange = mood.onChange = [this] (int) { if (onChoice) onChoice (style.getSelected(), mood.getSelected()); };
-            write.setTooltip ("Writes a new progression for this style and mood: bars 5-8 are the chorus loop, bars 1-4 the "
-                              "verse. Press again for another take. Also sets the scale and rhythm to suit the style.");
-            complete.setTooltip ("Keeps your chords and fills only the empty bars with a loop that fits them.");
+            first.onChange = second.onChange = [this] (int) { if (onChoice) onChoice (first.getSelected(), second.getSelected()); };
         }
 
-        writer::Style getStyle() const { return (writer::Style) style.getSelected(); }
-        writer::Mood getMood() const { return (writer::Mood) mood.getSelected(); }
-        void setChoice (int s, int m) { style.setSelected (s); mood.setSelected (m); }
-        std::function<void (int, int)> onChoice;  // style, mood
+        void setChoice (int a, int b) { first.setSelected (a); second.setSelected (b); }
+        void setTips (const juce::String& writeTip, const juce::String& completeTip)
+        {
+            write.setTooltip (writeTip);
+            complete.setTooltip (completeTip);
+        }
 
         void paint (juce::Graphics& g) override
         {
@@ -36,11 +40,11 @@ namespace pc::gui
             look::raised (g, r, 12.0f, colours::panel, false);
             g.setFont (look::font (14.0f));
             g.setColour (colours::text);
-            g.drawText ("WRITE A PROGRESSION", r.reduced (16.0f, 10.0f).withHeight (18.0f), juce::Justification::centredLeft);
+            g.drawText (title, r.reduced (16.0f, 10.0f).withHeight (18.0f), juce::Justification::centredLeft);
             g.setFont (look::font (12.0f, false));
             g.setColour (colours::textDim);
-            g.drawText ("Style", labelArea (style), juce::Justification::centredLeft);
-            g.drawText ("Mood", labelArea (mood), juce::Justification::centredLeft);
+            g.drawText (labelA, labelArea (first), juce::Justification::centredLeft);
+            g.drawText (labelB, labelArea (second), juce::Justification::centredLeft);
         }
 
         void resized() override
@@ -48,9 +52,9 @@ namespace pc::gui
             auto r = getLocalBounds().reduced (20, 14);
             close.setBounds (r.getRight() - 30, r.getY() - 4, 34, 28);
             r.removeFromTop (26);
-            style.setBounds (r.removeFromTop (30).withTrimmedLeft (54));
+            first.setBounds (r.removeFromTop (30).withTrimmedLeft (54));
             r.removeFromTop (6);
-            mood.setBounds (r.removeFromTop (30).withTrimmedLeft (54));
+            second.setBounds (r.removeFromTop (30).withTrimmedLeft (54));
             r.removeFromTop (10);
             auto buttons = r.removeFromTop (32);
             write.setBounds (buttons.removeFromRight (120));
@@ -64,15 +68,17 @@ namespace pc::gui
             return juce::Rectangle<float> ((float) c.getX() - 54.0f, (float) c.getY(), 50.0f, (float) c.getHeight());
         }
 
-        static juce::StringArray names (const char* const* list, int n)
-        {
-            juce::StringArray a;
-            for (int i = 0; i < n; ++i) a.add (list[i]);
-            return a;
-        }
-
-        TabStrip style { names (writer::styleNames.data(), writer::numStyles) },
-                 mood { names (writer::moodNames.data(), writer::numMoods) };
-        ActionButton write { "Write" }, complete { "Complete empty bars" }, close { "X" };
+        juce::String title, labelA, labelB;
+        TabStrip first, second;
+        ActionButton write { "Write" }, complete, close { "X" };
     };
+
+    // Names from a list of C strings, for the choice rows
+    template <size_t N>
+    juce::StringArray namesOf (const std::array<const char*, N>& list)
+    {
+        juce::StringArray a;
+        for (auto* n : list) a.add (n);
+        return a;
+    }
 }

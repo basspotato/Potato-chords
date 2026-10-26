@@ -6,6 +6,7 @@
 #include "PreviewSynth.h"
 #include "Presets.h"
 #include "Writer.h"
+#include "MelodyWriter.h"
 #include <set>
 #include <cstring>
 #include <map>
@@ -1014,6 +1015,88 @@ void keyboardClickTests()
     CHECK (held.sounding() == 0 && held.strayOffs == 0 && held.doubledOns == 0, "the clicked chord stops even if Chord keys was turned off meanwhile");
 }
 
+void melodyWriterTests()
+{
+    using namespace pc::melodywriter;
+    bool inRange = true, onChord = true, answersHome = true, questionsAway = true, oneLeap = true, repeatable = true, notesThere = true,
+         whoopOk = true;
+    std::set<std::string> variety;
+    for (int pr = 0; pr < (int) pc::presets::progressions.size(); ++pr)
+    {
+        const auto& preset = pc::presets::progressions[(size_t) pr];
+        const auto lane = pc::presets::fill (preset, Flavour::triad);
+        for (int sh = 0; sh < numShapes; ++sh)
+            for (int bu = 0; bu < numBusy; ++bu)
+                for (uint32_t seed = 0; seed < 40; ++seed)
+                {
+                    const auto shape = (Shape) sh;
+                    const auto tune = write (lane, preset.scale, shape, (Busy) bu, seed);
+                    repeatable = repeatable && write (lane, preset.scale, shape, (Busy) bu, seed).cells == tune.cells;
+                    if (shape == Shape::singAlong) variety.insert (tune.toString());
+                    for (int half = 0; half < 2; ++half)
+                    {
+                        const auto range = rangeFor (half);
+                        int notes = 0;
+                        for (int phrase = 0; phrase < 2; ++phrase)
+                        {
+                            const int start = (half * 2 + phrase) * phraseSteps;
+                            int prev = -1, leaps = 0, last = -1, lastStep = -1, beforeLast = -1;
+                            for (int st = start; st < start + phraseSteps; ++st)
+                            {
+                                const auto c = tune.cell (st);
+                                if (c.empty() || c.hold) continue;
+                                ++notes;
+                                const int degree = chordAt (lane, st);
+                                // An arp spans its chord; the answer's last note may reach the chord's third just above
+                                bool lastOfAnswer = phrase == 1;
+                                for (int k = st + 1; k < start + phraseSteps && lastOfAnswer; ++k)
+                                    lastOfAnswer = tune.cell (k).empty() || tune.cell (k).hold;
+                                const int hi = shape == Shape::arp || lastOfAnswer ? range.hi + 2 : range.hi;
+                                inRange = inRange && c.row >= range.lo && c.row <= hi;
+                                if (shape == Shape::whoop) whoopOk = whoopOk && (c.row == 2 || c.row == 4);
+                                else if (strongBeat (st)) onChord = onChord && isChordTone (c.row, degree);
+                                if (prev >= 0 && c.row - prev >= 3) ++leaps;
+                                beforeLast = last;
+                                prev = c.row;
+                                last = c.row;
+                                lastStep = st;
+                            }
+                            if (shape == Shape::singAlong || shape == Shape::riff)
+                            {
+                                oneLeap = oneLeap && leaps <= 1;
+                                if (phrase == 0) questionsAway = questionsAway && last % 7 != 0;
+                                else
+                                {
+                                    const int degree = chordAt (lane, lastStep);
+                                    // Home or the chord's third, unless reaching them would be a second leap
+                                    bool reachable = false;
+                                    for (int r = range.lo; r <= range.hi + 2; ++r)
+                                        reachable = reachable || (restsHome (r, degree) && r - beforeLast < 3);
+                                    answersHome = answersHome && (restsHome (last, degree) || (! reachable && isChordTone (last, degree)));
+                                }
+                            }
+                        }
+                        notesThere = notesThere && notes > 0;
+                    }
+                }
+    }
+    CHECK (notesThere, "melody writer: every half gets notes");
+    CHECK (inRange, "melody writer: the verse stays within a fifth, the chorus sits higher");
+    CHECK (onChord, "melody writer: notes on beats 1 and 3 belong to the chord");
+    CHECK (whoopOk, "melody writer: the whoop alternates the key's 5th and 3rd");
+    CHECK (questionsAway, "melody writer: the first phrase ends away from home (a question)");
+    CHECK (answersHome, "melody writer: the second phrase lands home or on the chord's third (the answer)");
+    CHECK (oneLeap, "melody writer: at most one leap per phrase");
+    CHECK (repeatable, "melody writer: the same seed always gives the same melody");
+    CHECK (variety.size() >= 100, "melody writer: the dice give plenty of different melodies");
+
+    // An empty lane still gets a melody, over the home chord
+    const auto lone = write ({}, Scale::major, Shape::singAlong, Busy::medium, 7);
+    int count = 0;
+    for (int st = 0; st < pc::melody::numSteps; ++st) count += lone.cell (st).empty() || lone.cell (st).hold ? 0 : 1;
+    CHECK (count > 0, "melody writer: an empty lane still gets a melody");
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1390,6 +1473,7 @@ int main()
     songPlaybackTests();
     writerTests();
     keyboardClickTests();
+    melodyWriterTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();

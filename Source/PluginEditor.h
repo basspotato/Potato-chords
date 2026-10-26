@@ -9,6 +9,8 @@
 #include "gui/MelodyLane.h"
 #include "gui/SongStrip.h"
 #include "gui/WriterPanel.h"
+#include "Writer.h"
+#include "MelodyWriter.h"
 #include <optional>
 
 class PotatoChordsEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -21,7 +23,7 @@ public:
     void resized() override;
     float zoom() const;  // window width / layout width
     void setSongView (bool song) { viewTabs.setSelected (song ? 1 : 0); showView (song); }  // for the snapshot tool
-    void showWriter() { writer.setVisible (true); }                                       // for the snapshot tool
+    void showWriter (bool melody) { auto& w = melody ? melodyWriter : writer; w.setVisible (true); w.toFront (false); }                                   // for the snapshot tool
 
 private:
     void timerCallback() override;
@@ -47,7 +49,7 @@ private:
     pc::gui::Switch chordKeys, preview, majorFive, playLane, learn, playSong;
     pc::gui::Fader chorusFader, reverbFader, strumFader, velocityFader, humaniseFader, swingFader;
     pc::gui::ActionButton clearLane { "Clear" }, clearMelody { "Clear" }, repeatMelody { "Repeat 1-4" }, exportMidi { "Export .mid" }, panic { "All notes off" },
-                          undo { "", -1 }, redo { "", 1 }, writeLane { "Write" };
+                          undo { "", -1 }, redo { "", 1 }, writeLane { "Write" }, writeMelody { "Write" };
     std::unique_ptr<juce::FileChooser> chooser;
     pc::gui::DragChip dragLane { "Drag lane" }, dragTake { "Drag take" }, dragMelody { "Drag melody" };
     pc::gui::LedToggle capture { "Capture", pc::gui::colours::record };
@@ -61,7 +63,10 @@ private:
     juce::ComboBox songTemplate, songLength, songBpm;
     pc::gui::DragChip dragSong { "Drag song" };
     pc::gui::SongStrip songStrip;
-    pc::gui::WriterPanel writer;
+    pc::gui::WriterPanel writer { "WRITE A PROGRESSION", "Style", pc::gui::namesOf (pc::writer::styleNames),
+                                  "Mood", pc::gui::namesOf (pc::writer::moodNames), "Complete empty bars" },
+                         melodyWriter { "WRITE A MELODY", "Shape", pc::gui::namesOf (pc::melodywriter::shapeNames),
+                                        "Busy", pc::gui::namesOf (pc::melodywriter::busyNames) };
     bool songView = false;
 
     juce::TooltipWindow tooltips { this, 600 };

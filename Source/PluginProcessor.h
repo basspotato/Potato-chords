@@ -117,7 +117,8 @@ public:
     }
     int playingSection() const { return sectionShown.load (std::memory_order_relaxed); }  // -1 when not playing a song
 
-    int writerStyle = 0, writerMood = 0;  // the Write panel's last choice (message thread only)
+    int writerStyle = 0, writerMood = 0;     // the Write panels' last choices (message thread only)
+    int melodyShape = 0, melodyBusy = 1;
     int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
     // Undo for lane and melody edits (message thread only). Call rememberEdit() just before changing either lane.

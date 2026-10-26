@@ -165,17 +165,21 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &writeLane, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &writeMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
-    addChildComponent (writer);  // added last so it opens on top
+    addChildComponent (writer);  // added last so they open on top
+    addChildComponent (melodyWriter);
 
     writer.setChoice (p.writerStyle, p.writerMood);
     writer.onChoice = [this] (int s, int m) { proc.writerStyle = s; proc.writerMood = m; };
     writer.onClose = [this] { writer.setVisible (false); };
-    writeLane.onClick = [this] { writer.setVisible (! writer.isVisible()); };
-    writer.onWrite = [this] (pc::writer::Style s, pc::writer::Mood m)
+    writeLane.onClick = [this] { melodyWriter.setVisible (false); writer.setVisible (! writer.isVisible()); writer.toFront (false); };
+    writer.setTips ("Writes a new progression for this style and mood: bars 5-8 are the chorus loop, bars 1-4 the verse. "
+                    "Press again for another take. Also sets the scale and rhythm to suit the style.",
+                    "Keeps your chords and fills only the empty bars with a loop that fits them.");
+    writer.onWrite = [this] (int style, int mood)
     {
-        const auto r = pc::writer::write (s, m, (uint32_t) juce::Random::getSystemRandom().nextInt());
+        const auto r = pc::writer::write ((pc::writer::Style) style, (pc::writer::Mood) mood, (uint32_t) juce::Random::getSystemRandom().nextInt());
         setParam (proc, pc::params::scale, r.scale == pc::theory::Scale::major ? 0.0f : 1.0f);
         setParam (proc, pc::params::rhythm, (float) r.rhythm);
         proc.rememberEdit();
@@ -183,13 +187,30 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         selectedSlot = -1;
         refresh();
     };
-    writer.onComplete = [this] (pc::writer::Style s, pc::writer::Mood m)
+    writer.onComplete = [this] (int style, int mood)
     {
         const bool minor = proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load() > 0.5f;
         proc.rememberEdit();
-        proc.lane.set (pc::writer::complete (proc.lane.snapshot(), minor ? pc::theory::Scale::minor : pc::theory::Scale::major, s, m,
+        proc.lane.set (pc::writer::complete (proc.lane.snapshot(), minor ? pc::theory::Scale::minor : pc::theory::Scale::major,
+                                             (pc::writer::Style) style, (pc::writer::Mood) mood,
                                              (uint32_t) juce::Random::getSystemRandom().nextInt()));
         selectedSlot = -1;
+        refresh();
+    };
+
+    melodyWriter.setChoice (p.melodyShape, p.melodyBusy);
+    melodyWriter.onChoice = [this] (int s, int b) { proc.melodyShape = s; proc.melodyBusy = b; };
+    melodyWriter.onClose = [this] { melodyWriter.setVisible (false); };
+    writeMelody.onClick = [this] { writer.setVisible (false); melodyWriter.setVisible (! melodyWriter.isVisible()); melodyWriter.toFront (false); };
+    melodyWriter.setTips ("Writes a melody over the progression: chord notes on beats 1 and 3, a question in bars 1-2 answered "
+                          "in bars 3-4, and the chorus (bars 5-8) a little higher. Press again for another take.", {});
+    melodyWriter.onWrite = [this] (int shape, int busy)
+    {
+        const bool minor = proc.apvts.getRawParameterValue (pc::params::scale.getParamID())->load() > 0.5f;
+        proc.rememberEdit();
+        proc.melody.set (pc::melodywriter::write (proc.lane.snapshot(), minor ? pc::theory::Scale::minor : pc::theory::Scale::major,
+                                                  (pc::melodywriter::Shape) shape, (pc::melodywriter::Busy) busy,
+                                                  (uint32_t) juce::Random::getSystemRandom().nextInt()));
         refresh();
     };
 
@@ -265,6 +286,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (presets, "Fills the progression with a well-known chord pattern. You can still edit every slot afterwards.");
     tip (playLane, "On: the progression and melody play along with your DAW's transport.");
     tip (writeLane, "Opens Write: a progression written for a style and mood, or your empty bars filled in.");
+    tip (writeMelody, "Opens Write: a melody written over your progression in the shape you pick.");
     tip (clearLane, "Empties the progression lane.");
     tip (rhythm, "The rhythm the progression plays: sustained, pulses, stabs or arpeggios.");
     tip (exportMidi, "Saves the progression as a .mid file.");
@@ -629,14 +651,17 @@ void PotatoChordsEditor::resized()
 
     lane.setBounds (margin, laneY, right - margin, laneH);
     writer.setBounds (margin + 120, laneY + laneH + 4, 560, 166);  // below the lane, so the new chords stay in view
+    melodyWriter.setBounds (margin + 120, padsY + 20, 560, 166);    // over the pads, so the melody stays in view
 
     auto melodyHead = juce::Rectangle<int> (margin + 120, melodyHeadY, right - margin - 120, rowH);
-    melodySound.setBounds (melodyHead.removeFromLeft (200).reduced (0, 1));
+    melodySound.setBounds (melodyHead.removeFromLeft (180).reduced (0, 1));
     melodyHead.removeFromLeft (8);
     clearMelody.setBounds (melodyHead.removeFromLeft (70));
     repeatMelody.setBounds (melodyHead.removeFromLeft (108));
     melodyHead.removeFromLeft (14);
     melodyOctave.setBounds (melodyHead.removeFromLeft (170));
+    melodyHead.removeFromLeft (8);
+    writeMelody.setBounds (melodyHead.removeFromLeft (66));
     dragMelody.setBounds (melodyHead.removeFromRight (130));
     melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 
@@ -724,7 +749,7 @@ void PotatoChordsEditor::applySongChoice()
 void PotatoChordsEditor::showView (bool song)
 {
     songView = song;
-    for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &melodyOctave, &dragMelody, &melodyLane })
+    for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &writeMelody, &melodyOctave, &dragMelody, &melodyLane })
         c->setVisible (! song);
     for (auto* c : std::initializer_list<juce::Component*> { &songTemplate, &songLength, &songBpm, &playSong, &dragSong, &songStrip })
         c->setVisible (song);
