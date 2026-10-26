@@ -63,6 +63,7 @@ Source/
   Song.h              — Song mode: section templates (Pop, Pop-EDM, EDM club), fit to a length
   Writer.h            — Write a chord progression (16-loop catalogue by style and mood) and Complete empty bars
   MelodyWriter.h      — Write a melody over the lane (Sing-along, Riff, Arp, Whoop; question/answer phrases)
+  Ideas.h             — 12 song ideas: key, chords, rhythm, melody, song template and tempo in one click
   Sequencer.h         — lane rhythm patterns on a 1/16 grid (playback itself is runLane in PluginProcessor)
   MidiOut.h           — note scheduling with sample-accurate offsets, hanging-note protection
   Presets.h           — factory progressions and next-chord hints

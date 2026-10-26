@@ -107,7 +107,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         rhythm.addItem ("Rhythm: " + pc::params::rhythmNames[i], i + 1);
     rhythm.setSelectedItemIndex ((int) p.apvts.getRawParameterValue (pc::params::rhythm.getParamID())->load(), juce::dontSendNotification);
 
-    presets.setTextWhenNothingSelected ("Starter progressions");
+    presets.setTextWhenNothingSelected ("Starters & ideas");
     for (int i = 0; i < (int) pc::presets::progressions.size(); ++i)
     {
         const auto& pr = pc::presets::progressions[(size_t) i];
@@ -115,9 +115,13 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
         if (i == 4) presets.addSectionHeading ("Minor");
         presets.addItem (juce::String (pr.name) + "   " + pr.nickname, i + 1);
     }
+    presets.addSectionHeading ("Song ideas (chords, melody, song and tempo)");
+    for (int i = 0; i < pc::ideas::numIdeas; ++i)
+        presets.addItem (juce::String (pc::ideas::ideas[(size_t) i].name) + "   " + pc::ideas::ideas[(size_t) i].about, ideaIdBase + i);
     presets.onChange = [this]
     {
-        if (const int id = presets.getSelectedId(); id > 0) loadPreset (id - 1);
+        if (const int id = presets.getSelectedId(); id >= ideaIdBase) loadIdea (id - ideaIdBase);
+        else if (id > 0) loadPreset (id - 1);
         presets.setSelectedId (0, juce::dontSendNotification);
     };
 
@@ -283,7 +287,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (majorFive, "Uses a major V chord in a minor key. It pulls strongly back to the home chord.");
     tip (undo, "Undo the last change to the progression or melody.");
     tip (redo, "Redo the change you just undid.");
-    tip (presets, "Fills the progression with a well-known chord pattern. You can still edit every slot afterwards.");
+    tip (presets, "Fills the progression with a well-known chord pattern, or loads a song idea: key, chords, rhythm, melody, "
+                  "song shape and tempo in one click. You can still edit everything afterwards.");
     tip (playLane, "On: the progression and melody play along with your DAW's transport.");
     tip (writeLane, "Opens Write: a progression written for a style and mood, or your empty bars filled in.");
     tip (writeMelody, "Opens Write: a melody written over your progression in the shape you pick.");
@@ -401,6 +406,25 @@ void PotatoChordsEditor::loadPreset (int index)
     setParam (proc, pc::params::scale, pr.scale == pc::theory::Scale::major ? 0.0f : 1.0f);
     proc.rememberEdit();
     proc.lane.set (pc::presets::fill (pr, (pc::theory::Flavour) (int) proc.apvts.getRawParameterValue (pc::params::flavour.getParamID())->load()));
+    selectedSlot = -1;
+    refresh();
+}
+
+// A song idea sets the key, chords, rhythm, melody, song template and tempo in one go
+void PotatoChordsEditor::loadIdea (int index)
+{
+    const auto& idea = pc::ideas::ideas[(size_t) index];
+    const auto loaded = pc::ideas::load (idea);
+    setParam (proc, pc::params::key, (float) idea.key);
+    setParam (proc, pc::params::scale, loaded.scale == pc::theory::Scale::major ? 0.0f : 1.0f);
+    setParam (proc, pc::params::rhythm, (float) idea.rhythm);
+    proc.rememberEdit();
+    proc.lane.set (loaded.lane);
+    proc.melody.set (loaded.tune);
+    proc.setSong ({ pc::song::fromTemplate (idea.songTemplate), idea.songTemplate, 0, idea.bpm });
+    songTemplate.setSelectedId (idea.songTemplate + 1, juce::dontSendNotification);
+    songLength.setSelectedId (1, juce::dontSendNotification);
+    songBpm.setText (juce::String (idea.bpm) + " BPM", juce::dontSendNotification);
     selectedSlot = -1;
     refresh();
 }

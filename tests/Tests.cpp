@@ -7,6 +7,7 @@
 #include "Presets.h"
 #include "Writer.h"
 #include "MelodyWriter.h"
+#include "Ideas.h"
 #include <set>
 #include <cstring>
 #include <map>
@@ -1097,6 +1098,34 @@ void melodyWriterTests()
     CHECK (count > 0, "melody writer: an empty lane still gets a melody");
 }
 
+void ideaTests()
+{
+    using namespace pc::ideas;
+    bool valid = true, filled = true, melodyThere = true, sameScale = true, repeatable = true, distinct = true;
+    std::set<std::string> lanes;
+    for (const auto& idea : ideas)
+    {
+        valid = valid && idea.key >= 0 && idea.key < 12 && idea.rhythm >= 0 && idea.rhythm < pc::sequencer::numPatterns
+             && idea.songTemplate >= 0 && idea.songTemplate < pc::song::numTemplates && idea.bpm >= pc::song::minBpm
+             && idea.bpm <= pc::song::maxBpm && idea.verse.loop >= 0 && idea.verse.loop < pc::writer::numLoops
+             && idea.chorus.loop >= 0 && idea.chorus.loop < pc::writer::numLoops;
+        if (! valid) break;
+        sameScale = sameScale && pc::writer::loops[(size_t) idea.verse.loop].scale == pc::writer::loops[(size_t) idea.chorus.loop].scale;
+        const auto loaded = load (idea);
+        for (int bar = 0; bar < 8; ++bar) filled = filled && ! loaded.lane.slot (bar * 2).empty();
+        int notes = 0;
+        for (int st = 0; st < pc::melody::numSteps; ++st) notes += loaded.tune.cell (st).empty() ? 0 : 1;
+        melodyThere = melodyThere && notes > 0;
+        repeatable = repeatable && load (idea).tune.cells == loaded.tune.cells;
+        distinct = distinct && lanes.insert (loaded.lane.toString() + std::to_string (idea.key)).second;
+    }
+    CHECK (valid, "ideas: every setting is in range");
+    CHECK (sameScale, "ideas: verse and chorus loops share a scale");
+    CHECK (filled && melodyThere, "ideas: each fills all 8 bars and writes a melody");
+    CHECK (repeatable, "ideas: loading an idea always gives the same result");
+    CHECK (distinct, "ideas: no two ideas are the same");
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1474,6 +1503,7 @@ int main()
     writerTests();
     keyboardClickTests();
     melodyWriterTests();
+    ideaTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();

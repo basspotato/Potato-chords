@@ -11,6 +11,7 @@
 #include "gui/WriterPanel.h"
 #include "Writer.h"
 #include "MelodyWriter.h"
+#include "Ideas.h"
 #include <optional>
 
 class PotatoChordsEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -30,6 +31,8 @@ private:
     void refresh();
     void padPressed (int degree);
     void loadPreset (int index);
+    void loadIdea (int index);
+    static constexpr int ideaIdBase = 101;  // Starters menu ids: 1-8 progressions, 101+ song ideas
     void exportLane();
     juce::File laneFile();
     int hintSource() const;
