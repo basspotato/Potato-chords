@@ -101,6 +101,15 @@ public:
         int templateIndex = 0, length = 0;  // length: 0 = the template's own, else minutes x 2 (5 = 2:30)
         int bpm = 0;                        // the song's tempo for fitting and MIDI files; 0 = follow the host
     };
+    // The melody's octave shift and sound: its own, or the chords' when linked
+    int melodyOctaveShift() const
+    {
+        return linkMelodyParam->load() > 0.5f ? (int) octaveParam->load() - 2 : (int) melodyOctaveParam->load() - 1;
+    }
+    int melodySoundIndex() const
+    {
+        return (int) (linkMelodyParam->load() > 0.5f ? soundParam->load() : melodySoundParam->load());
+    }
     SongState getSong() const
     {
         const juce::SpinLock::ScopedLockType lock (songLock);
@@ -211,6 +220,7 @@ private:
     std::atomic<float>* humaniseParam = nullptr;
     std::atomic<float>* swingParam = nullptr;
     std::atomic<float>* melodyOctaveParam = nullptr;
+    std::atomic<float>* linkMelodyParam = nullptr;
     std::atomic<float>* songPlayParam = nullptr;
     int swingDelay = 0;  // samples the next lane or melody note start is pushed late (set per 1/16 step in runLane)
     juce::Random random { 0x5eed };

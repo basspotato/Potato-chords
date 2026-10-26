@@ -45,7 +45,7 @@ namespace pc::gui
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            if (e.x < captionWidth) return;
+            if (e.x < captionWidth || ! isEnabled()) return;
             const int i = juce::jlimit (0, names.size() - 1,
                                         (int) ((float) (e.x - captionWidth) / (float) (getWidth() - captionWidth) * (float) names.size()));
             attachment.setValueAsCompleteGesture ((float) i);

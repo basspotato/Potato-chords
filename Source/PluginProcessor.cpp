@@ -39,6 +39,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     swingParam = apvts.getRawParameterValue (swing.getParamID());
     melodyOctaveParam = apvts.getRawParameterValue (melodyOctave.getParamID());
     songPlayParam = apvts.getRawParameterValue (songPlay.getParamID());
+    linkMelodyParam = apvts.getRawParameterValue (linkMelody.getParamID());
     songLane.set (song);
 
     out.ensureSize (8192);
@@ -463,7 +464,7 @@ void PotatoChordsProcessor::melodyStep (const pc::melody::Snapshot& tune, int st
         return;
     }
     const int note = pc::melody::rowToNote (cell.row, laneSettings.key, (pc::theory::Scale) laneSettings.scale,
-                                          (int) melodyOctaveParam->load() - 1);
+                                          melodyOctaveShift());
     if (cell.hold && ! restart && note == melodyNote) return;
     stopMelodyNote (samplePos);
     melodyNote = note;
@@ -521,7 +522,7 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     }
     previewWasOn = true;
     synth.setPreset ((int) soundParam->load());
-    synth.setChannelPreset (melodyChannel, (int) melodySoundParam->load());
+    synth.setChannelPreset (melodyChannel, melodySoundIndex());
 
     auto* left = buffer.getWritePointer (0);
     auto* right = buffer.getWritePointer (1);

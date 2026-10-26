@@ -32,6 +32,7 @@ namespace pc::params
     inline const juce::ParameterID melodyOctave { "melodyOctave", 1 };
     inline const juce::ParameterID songPlay  { "songPlay", 1 };
     inline const juce::ParameterID humanise  { "humanise", 1 };
+    inline const juce::ParameterID linkMelody { "linkMelody", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -84,6 +85,8 @@ namespace pc::params
         // Effects on the preview sound only, 0-1
         layout.add (std::make_unique<juce::AudioParameterFloat> (chorus, "Chorus", juce::NormalisableRange<float> (0.0f, 1.0f), 0.15f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (reverb, "Reverb", juce::NormalisableRange<float> (0.0f, 1.0f), 0.25f));
+        // On: the melody uses the chords' Octave and Sound instead of its own
+        layout.add (std::make_unique<juce::AudioParameterBool> (linkMelody, "Link melody to chords", false));
         return layout;
     }
 }

@@ -53,6 +53,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       playLane (param (p, pc::params::playLane), "Play with host"),
       learn (param (p, pc::params::learn), "Learn"),
       playSong (param (p, pc::params::songPlay), "Play song"),
+      linkMelody (param (p, pc::params::linkMelody), "Link to chords"),
       chorusFader (param (p, pc::params::chorus), "Chorus"),
       reverbFader (param (p, pc::params::reverb), "Reverb"),
       strumFader (param (p, pc::params::strum), "Strum"),
@@ -169,7 +170,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &writeLane, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &writeMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &songSync, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &writeMelody, &linkMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &songSync, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
     addChildComponent (writer);  // added last so they open on top
     addChildComponent (melodyWriter);
@@ -298,7 +299,8 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (exportMidi, "Saves the progression as a .mid file.");
     tip (dragLane, "Drag this into your DAW to drop the progression on a MIDI track.");
     tip (lane, "8 bars. Click a slot, then click a chord pad to fill it. The small box on a bar splits it into two chords. Right-click for more.");
-    tip (melodySound, "The built-in sound you hear for the melody.");
+    tip (melodySound, "The built-in sound you hear for the melody (the chord Sound while Link to chords is on).");
+    tip (linkMelody, "On: the melody follows the chords' Octave and Sound, so one control moves both. Off: the melody keeps its own.");
     tip (clearMelody, "Empties the melody lane.");
     tip (repeatMelody, "Copies bars 1 to 4 of the melody over bars 5 to 8.");
     tip (dragMelody, "Drag this into your DAW to drop the melody on a MIDI track.");
@@ -470,6 +472,10 @@ void PotatoChordsEditor::refresh()
         if (const auto text = juce::String (shown) + " BPM"; songBpm.getText() != text) songBpm.setText (text, juce::dontSendNotification);
     }
     undo.setEnabled (proc.canUndo());
+    const bool linked = proc.apvts.getRawParameterValue (pc::params::linkMelody.getParamID())->load() > 0.5f;
+    melodyOctave.setEnabled (! linked);
+    melodySound.setEnabled (! linked);
+    melodyOctave.setAlpha (linked ? 0.4f : 1.0f);
     redo.setEnabled (proc.canRedo());
     const int held = proc.heldDegree();
     const bool flats = proc.keyUsesFlats();
@@ -690,14 +696,16 @@ void PotatoChordsEditor::resized()
     melodyWriter.setBounds (margin + 120, padsY + 20, 560, 166);    // over the pads, so the melody stays in view
 
     auto melodyHead = juce::Rectangle<int> (margin + 120, melodyHeadY, right - margin - 120, rowH);
-    melodySound.setBounds (melodyHead.removeFromLeft (180).reduced (0, 1));
+    melodySound.setBounds (melodyHead.removeFromLeft (160).reduced (0, 1));
     melodyHead.removeFromLeft (8);
-    clearMelody.setBounds (melodyHead.removeFromLeft (70));
-    repeatMelody.setBounds (melodyHead.removeFromLeft (108));
-    melodyHead.removeFromLeft (14);
-    melodyOctave.setBounds (melodyHead.removeFromLeft (170));
+    clearMelody.setBounds (melodyHead.removeFromLeft (64));
+    repeatMelody.setBounds (melodyHead.removeFromLeft (100));
+    melodyHead.removeFromLeft (10);
+    melodyOctave.setBounds (melodyHead.removeFromLeft (150));
     melodyHead.removeFromLeft (8);
     writeMelody.setBounds (melodyHead.removeFromLeft (66));
+    melodyHead.removeFromLeft (8);
+    linkMelody.setBounds (melodyHead.removeFromLeft (114));
     dragMelody.setBounds (melodyHead.removeFromRight (130));
     melodyLane.setBounds (margin, melodyY, right - margin, melodyH);
 
@@ -750,7 +758,7 @@ pc::midiexport::Feel PotatoChordsEditor::feel (bool forMelody) const
     if (forMelody)
     {
         f.channel = PotatoChordsProcessor::melodyChannel;
-        f.octaves = (int) value (pc::params::melodyOctave) - 1;
+        f.octaves = proc.melodyOctaveShift();
     }
     else
     {
@@ -798,7 +806,7 @@ void PotatoChordsEditor::setSongBpm (int bpm)
 void PotatoChordsEditor::showView (bool song)
 {
     songView = song;
-    for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &writeMelody, &melodyOctave, &dragMelody, &melodyLane })
+    for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &writeMelody, &linkMelody, &melodyOctave, &dragMelody, &melodyLane })
         c->setVisible (! song);
     for (auto* c : std::initializer_list<juce::Component*> { &songTemplate, &songLength, &songBpm, &songSync, &playSong, &dragSong, &songStrip })
         c->setVisible (song);

@@ -1167,6 +1167,44 @@ void stateRobustnessTests()
     runBlock (*other, {});
 }
 
+// Link to chords: the melody takes the chords' octave and sound
+void linkMelodyTests()
+{
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    setParam (*proc, pc::params::melodyOctave, 2.0f);  // +1
+    setParam (*proc, pc::params::octave, 0.0f);        // -2
+    setParam (*proc, pc::params::sound, 3.0f);
+    setParam (*proc, pc::params::melodySound, 20.0f);
+    CHECK (proc->melodyOctaveShift() == 1 && proc->melodySoundIndex() == 20, "unlinked: the melody keeps its own octave and sound");
+    setParam (*proc, pc::params::linkMelody, 1.0f);
+    CHECK (proc->melodyOctaveShift() == -2 && proc->melodySoundIndex() == 3, "linked: the melody follows the chord octave and sound");
+
+    proc->melody.addNote (0, 4, 0);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+    Held held;
+    long clock = 0;
+    const auto t = runTransport (*proc, head, 8, held, clock);
+    CHECK (! t.ons.empty() && t.ons.front().second == pc::melody::rowToNote (0, 0, Scale::major, -2), "linked: the melody note is shifted down two octaves");
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 0 && held.strayOffs == 0, "linked: nothing hangs on stop");
+
+    // Switching the link while a note sounds must not strand it
+    setParam (*proc, pc::params::linkMelody, 0.0f);
+    head.playing = true;
+    head.ppq = 0.0;
+    runTransport (*proc, head, 2, held, clock);
+    setParam (*proc, pc::params::linkMelody, 1.0f);
+    runTransport (*proc, head, 2, held, clock);
+    head.playing = false;
+    runTransport (*proc, head, 1, held, clock);
+    CHECK (held.sounding() == 0 && held.strayOffs == 0 && held.doubledOns == 0, "toggling the link mid-note leaves no hanging notes");
+    proc->setPlayHead (nullptr);
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1546,6 +1584,7 @@ int main()
     melodyWriterTests();
     ideaTests();
     stateRobustnessTests();
+    linkMelodyTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();
