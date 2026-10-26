@@ -808,6 +808,78 @@ void songTests()
     CHECK (other->getSong().song.toString() == fromTemplate (0).toString(), "older state without a song loads the Pop template");
 }
 
+// Song play: the host transport walks the sections, each with its own loop half, rhythm and melody
+void songPlaybackTests()
+{
+    using namespace pc::song;
+    auto proc = makeProcessor();
+    setParam (*proc, pc::params::key, 0.0f);
+    setParam (*proc, pc::params::scale, 0.0f);
+    auto lane = pc::presets::fill (pc::presets::progressions[0], Flavour::triad);  // I V vi IV twice
+    lane.slots[8] = pc::progression::Slot { 3, Flavour::triad, false }.encode();      // bar 5 = IV
+    proc->lane.set (lane);
+    pc::melody::Lane tune;
+    tune.addNote (0, 4, 0);  // C5 on beat 1 of bar 1
+    proc->melody.set (tune.snapshot());
+    Song song;
+    song.add (Kind::intro, 4);
+    song.add (Kind::verse, 4);
+    song.add (Kind::chorus, 4);
+    proc->setSong ({ song, 0, 0 });
+    setParam (*proc, pc::params::songPlay, 1.0f);
+    TestPlayHead head;
+    proc->setPlayHead (&head);
+
+    const long barSamples = 96000;
+    struct Ev { long pos; int channel, note; };
+    std::vector<Ev> ons;
+    Held held;
+    long clock = 0;
+    int sectionInChorus = -2;
+    auto play = [&] (long samples)
+    {
+        for (long done = 0; done < samples; done += blockSize)
+        {
+            const auto out = runBlock (*proc, {});
+            held.add (out);
+            for (const auto meta : out)
+                if (meta.getMessage().isNoteOn())
+                    ons.push_back ({ clock + meta.samplePosition, meta.getMessage().getChannel(), meta.getMessage().getNoteNumber() });
+            if (head.playing) head.advance (blockSize);
+            clock += blockSize;
+            if (clock > 9 * barSamples && sectionInChorus == -2) sectionInChorus = proc->playingSection();
+        }
+    };
+    play (13 * barSamples);
+
+    auto chordAt = [&] (long pos)
+    {
+        Notes pcs;
+        for (auto& e : ons) if (e.pos == pos && e.channel == 1) pcs.push_back (e.note % 12);
+        std::sort (pcs.begin(), pcs.end());
+        return pcs;
+    };
+    std::vector<long> melodyOns;
+    for (auto& e : ons) if (e.channel == 2) melodyOns.push_back (e.pos);
+    CHECK ((chordAt (0) == Notes { 0, 4, 7 }), "song play: the intro starts on lane bar 1 (I)");
+    CHECK ((chordAt (8 * barSamples) == Notes { 0, 5, 9 }), "song play: the chorus jumps to lane bar 5 (IV), to the sample");
+    CHECK ((chordAt (12 * barSamples) == Notes { 0, 4, 7 }), "song play: the song loops back to the intro after its last section");
+    CHECK ((melodyOns == std::vector<long> { 4 * barSamples, 8 * barSamples }), "song play: no melody in the intro; verse and chorus play it");
+    CHECK (sectionInChorus == 2, "the GUI sees the chorus playing");
+    CHECK (held.doubledOns == 0 && held.strayOffs == 0, "section changes: nothing doubled or stray");
+
+    // Song play off mid-song: back to the 8-bar loop at once, cleanly (song bar 14 = lane bar 6, chord V)
+    setParam (*proc, pc::params::songPlay, 0.0f);
+    ons.clear();
+    play (blockSize);
+    CHECK ((chordAt (13 * barSamples) == Notes { 2, 7, 11 }) && proc->playingSection() == -1,
+           "turning Song play off goes straight back to the lane loop");
+    head.playing = false;
+    play (blockSize);
+    CHECK (held.sounding() == 0 && held.doubledOns == 0 && held.strayOffs == 0, "song play: stop releases everything");
+    proc->setPlayHead (nullptr);
+}
+
 void exportVelocityTests()
 {
     pc::melody::Lane tune;
@@ -1181,6 +1253,7 @@ int main()
     rhythmTests();
     melodyTests();
     songTests();
+    songPlaybackTests();
     exportVelocityTests();
     melodyOctaveTests();
     repeatTests();

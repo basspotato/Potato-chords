@@ -1,5 +1,7 @@
 #pragma once
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <cmath>
 #include <string>
 
@@ -55,6 +57,16 @@ namespace pc::song
             for (int i = 0; i < count; ++i) n += sections[(size_t) i].bars;
             return n;
         }
+
+        bool operator== (const Song& o) const
+        {
+            if (count != o.count) return false;
+            for (int i = 0; i < count; ++i)
+                if (sections[(size_t) i].kind != o.sections[(size_t) i].kind || sections[(size_t) i].bars != o.sections[(size_t) i].bars)
+                    return false;
+            return true;
+        }
+        bool operator!= (const Song& o) const { return ! (*this == o); }
 
         int startBar (int index) const
         {
@@ -263,4 +275,35 @@ namespace pc::song
         adjustLengths();
         return song;
     }
+
+    // The song as the audio thread reads it: one atomic per section, so the GUI can edit while it plays
+    class SongLane
+    {
+    public:
+        Song snapshot() const
+        {
+            Song s;
+            const int n = count.load (std::memory_order_relaxed);
+            for (int i = 0; i < n && i < maxSections; ++i)
+            {
+                const auto v = cells[(size_t) i].load (std::memory_order_relaxed);
+                s.sections[(size_t) i] = { (Kind) (v & 15), v >> 4 };
+            }
+            s.count = n < 0 ? 0 : n > maxSections ? maxSections : n;
+            return s;
+        }
+
+        void set (const Song& s)
+        {
+            count.store (0, std::memory_order_relaxed);  // readers see no section half-written as part of the song
+            for (int i = 0; i < s.count; ++i)
+                cells[(size_t) i].store ((uint16_t) ((int) s.sections[(size_t) i].kind | (s.sections[(size_t) i].bars << 4)),
+                                         std::memory_order_relaxed);
+            count.store (s.count, std::memory_order_release);
+        }
+
+    private:
+        std::array<std::atomic<uint16_t>, maxSections> cells {};
+        std::atomic<int> count { 0 };
+    };
 }

@@ -30,6 +30,7 @@ namespace pc::params
     inline const juce::ParameterID velocity  { "velocity", 1 };
     inline const juce::ParameterID swing     { "swing", 1 };
     inline const juce::ParameterID melodyOctave { "melodyOctave", 1 };
+    inline const juce::ParameterID songPlay  { "songPlay", 1 };
     inline const juce::ParameterID humanise  { "humanise", 1 };
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -70,6 +71,8 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodySound, "Melody sound", soundNames, 23));
         // Pushes the odd 1/16 steps of the lane and melody late, 0-1
         layout.add (std::make_unique<juce::AudioParameterFloat> (swing, "Swing", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f));
+        // On: the lane plays the Song view's sections in order with the host instead of looping its 8 bars
+        layout.add (std::make_unique<juce::AudioParameterBool> (songPlay, "Play song", false));
         layout.add (std::make_unique<juce::AudioParameterChoice> (melodyOctave, "Melody octave", melodyOctaveNames, 1));
         // Velocity of pad, lane and melody notes (chord keys keep the velocity played)
         layout.add (std::make_unique<juce::AudioParameterInt> (velocity, "Velocity", 1, 127, 100));

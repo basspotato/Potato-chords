@@ -52,6 +52,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       majorFive (param (p, pc::params::majorFive), "Major V"),
       playLane (param (p, pc::params::playLane), "Play with host"),
       learn (param (p, pc::params::learn), "Learn"),
+      playSong (param (p, pc::params::songPlay), "Play song"),
       chorusFader (param (p, pc::params::chorus), "Chorus"),
       reverbFader (param (p, pc::params::reverb), "Reverb"),
       strumFader (param (p, pc::params::strum), "Strum"),
@@ -164,7 +165,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
 
     for (int i = 0; i < pc::theory::numDegrees; ++i)
@@ -249,6 +250,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (viewTabs, "Switch between drawing the melody and laying out a whole song.");
     tip (songTemplate, "A song shape from Pop and EDM hits: which sections come in what order, and how long each is.");
     tip (songLength, "Fits the song to a length at the current tempo by stretching intros, choruses and drops, or adding sections.");
+    tip (playSong, "On: Play with host plays the whole song, section by section, instead of looping the 8 bars.");
     tip (dragSong, "Drag the whole song into your DAW: chords on one track, melody on another.");
     tip (songStrip, "Verse-type sections loop bars 1-4 of the progression, chorus-type sections loop bars 5-8. "
                     "Drag a block into your DAW for that section, right-click to change it.");
@@ -362,7 +364,7 @@ void PotatoChordsEditor::timerCallback() { refresh(); }
 
 void PotatoChordsEditor::refresh()
 {
-    if (songView) songStrip.update (proc.getSong().song);
+    if (songView) songStrip.update (proc.getSong().song, proc.playingSection());
     undo.setEnabled (proc.canUndo());
     redo.setEnabled (proc.canRedo());
     const int held = proc.heldDegree();
@@ -595,6 +597,8 @@ void PotatoChordsEditor::resized()
     songHead.removeFromLeft (8);
     songLength.setBounds (songHead.removeFromLeft (170).reduced (0, 1));
     dragSong.setBounds (songHead.removeFromRight (130));
+    songHead.removeFromRight (8);
+    playSong.setBounds (songHead.removeFromRight (120));
     songStrip.setBounds (margin, melodyY, right - margin, melodyH);
 
     auto row = juce::Rectangle<int> (margin, displayY, right - margin, displayH);
@@ -667,7 +671,7 @@ void PotatoChordsEditor::showView (bool song)
     songView = song;
     for (auto* c : std::initializer_list<juce::Component*> { &melodySound, &clearMelody, &repeatMelody, &melodyOctave, &dragMelody, &melodyLane })
         c->setVisible (! song);
-    for (auto* c : std::initializer_list<juce::Component*> { &songTemplate, &songLength, &dragSong, &songStrip })
+    for (auto* c : std::initializer_list<juce::Component*> { &songTemplate, &songLength, &playSong, &dragSong, &songStrip })
         c->setVisible (song);
     refresh();
 }

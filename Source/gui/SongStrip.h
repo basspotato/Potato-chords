@@ -14,10 +14,12 @@ namespace pc::gui
         std::function<juce::File (int)> makeSectionFile;  // section index -> temp .mid
         std::function<void (const song::Song&)> onEdit;   // the user changed the sections
 
-        void update (const song::Song& s)
+        // playing = the section the host is in (-1 when Song play is off or stopped)
+        void update (const song::Song& s, int playing = -1)
         {
-            if (s.toString() == current.toString()) return;
+            if (s == current && playing == playingNow) return;
             current = s;
+            playingNow = playing;
             repaint();
         }
 
@@ -45,9 +47,9 @@ namespace pc::gui
                 x += w;
 
                 const auto c = colours::forSection ((int) sec.kind);
-                const bool hot = i == hover;
+                const bool hot = i == hover || i == playingNow;
                 look::glow (g, r, 6.0f, c, hot ? 0.9f : 0.35f);
-                look::raised (g, r, 7.0f, colours::panelLight, false);
+                look::raised (g, r, 7.0f, colours::panelLight, i == playingNow);
                 // Coloured top band and loop marker
                 g.setColour (c.withAlpha (hot ? 0.95f : 0.8f));
                 g.fillRoundedRectangle (r.withHeight (6.0f).reduced (3.0f, 0.0f).translated (0.0f, 4.0f), 3.0f);
@@ -140,7 +142,7 @@ namespace pc::gui
 
         song::Song current;
         std::vector<juce::Rectangle<float>> blocks;
-        int hover = -1;
+        int hover = -1, playingNow = -1;
         bool dragging = false;
     };
 }

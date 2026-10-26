@@ -37,6 +37,8 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     humaniseParam = apvts.getRawParameterValue (humanise.getParamID());
     swingParam = apvts.getRawParameterValue (swing.getParamID());
     melodyOctaveParam = apvts.getRawParameterValue (melodyOctave.getParamID());
+    songPlayParam = apvts.getRawParameterValue (songPlay.getParamID());
+    songLane.set (song);
 
     out.ensureSize (8192);
 }
@@ -317,6 +319,7 @@ void PotatoChordsProcessor::runLane (int numSamples)
         laneRunning = false;
         laneCurrent = -1;
         melodyStepShown.store (-1, std::memory_order_relaxed);
+        sectionShown.store (-1, std::memory_order_relaxed);
         return;
     }
 
@@ -328,8 +331,39 @@ void PotatoChordsProcessor::runLane (int numSamples)
     const int swingSamples = (int) std::llround (swingParam->load() * pc::params::swingMaxStep * stepQuarters / ppqPerSample);
     const auto snap = lane.snapshot();
     const auto settings = readSettings();
-    const auto& pattern = pc::sequencer::patterns[(size_t) juce::jlimit (0, pc::sequencer::numPatterns - 1, (int) rhythmParam->load())];
+    const int lanePattern = juce::jlimit (0, pc::sequencer::numPatterns - 1, (int) rhythmParam->load());
     auto inLoop = [loopQ] (double p) { const double m = std::fmod (p, loopQ); return m < 0.0 ? m + loopQ : m; };
+    const auto tune = melody.snapshot();
+
+    // Song mode: the host position walks the song's sections; each section loops its half of the lane (and of the
+    // melody) with its own rhythm. Otherwise the lane loops its 8 bars with the Rhythm setting.
+    const bool songOn = songPlayParam->load() > 0.5f;
+    const auto songNow = songOn ? songLane.snapshot() : pc::song::Song {};
+    const bool useSong = songNow.count > 0 && songNow.totalBars() > 0;
+    const double songQ = songNow.totalBars() * barQ;
+    int chordHalf[2] {}, tuneHalf[2] {};
+    for (int loop = 0; loop < 2; ++loop)
+    {
+        const auto kind = loop == 0 ? pc::song::Kind::verse : pc::song::Kind::chorus;
+        chordHalf[loop] = pc::midiexport::loopStartBar (snap, kind);
+        tuneHalf[loop] = pc::midiexport::melodyLoopStartBar (tune, kind);
+    }
+    struct Where { double lanePos, tunePos; int pattern; bool melodyOn; int section; };
+    auto where = [&] (double p) -> Where
+    {
+        if (! useSong) return { inLoop (p), inLoop (p), lanePattern, true, -1 };
+        double q = std::fmod (p, songQ);
+        if (q < 0.0) q += songQ;
+        int start = 0, i = 0;
+        while (i < songNow.count - 1 && q >= (start + songNow.sections[(size_t) i].bars) * barQ - 1.0e-9)
+            start += songNow.sections[(size_t) i++].bars;
+        const auto& info = pc::song::info (songNow.sections[(size_t) i].kind);
+        const double inSection = q - start * barQ;
+        const int barIn = juce::jmax (0, (int) std::floor (inSection / barQ + 1.0e-9));
+        const double frac = juce::jmax (0.0, inSection - barIn * barQ);
+        return { (chordHalf[info.loop] + barIn % 4) * barQ + frac, (tuneHalf[info.loop] + barIn % 4) * barQ + frac,
+                 info.rhythm, info.melody, i };
+    };
     auto stepInSlot = [&] (double posInLoop, int slotIndex)
     {
         const int bar = slotIndex / 2;
@@ -340,25 +374,30 @@ void PotatoChordsProcessor::runLane (int numSamples)
     // A jump (start, locate, host loop, tempo change that moves the position), an edit to the current slot or a
     // key change: re-enter the slot and sound whatever the pattern has at this moment
     const bool jumped = ! laneRunning || std::abs (ppq - expectedPpq) > ppqPerSample + 1.0e-6;
-    const bool settingsChanged = settings != laneSettings;
+    const bool settingsChanged = settings != laneSettings || useSong != laneSongOn || (useSong && songNow != laneSong);
     laneSettings = settings;
-    const double startInLoop = inLoop (ppq + 1.0e-9);
+    laneSongOn = useSong;
+    laneSong = songNow;
+    const auto here = where (ppq + 1.0e-9);
+    const double startInLoop = here.lanePos;
     const int now = snap.slotAt (startInLoop, barQ);
     const bool restarted = jumped || now != laneCurrent || snap.chordIn (now).encode() != laneCode || settingsChanged;
-    const auto tune = melody.snapshot();
-    auto melodyIndex = [barQ] (double posInLoop)
+    auto melodyIndex = [barQ] (const Where& w)
     {
-        const int bar = juce::jlimit (0, pc::progression::numBars - 1, (int) (posInLoop / barQ));
-        const int step = (int) std::floor ((posInLoop - bar * barQ) / pc::sequencer::stepQuarters + 1.0e-6);
+        if (! w.melodyOn) return -1;
+        const int bar = juce::jlimit (0, pc::progression::numBars - 1, (int) (w.tunePos / barQ));
+        const int step = (int) std::floor ((w.tunePos - bar * barQ) / pc::sequencer::stepQuarters + 1.0e-6);
         return step < pc::melody::stepsPerBar ? bar * pc::melody::stepsPerBar + step : -1;
     };
+    auto patternOf = [] (const Where& w) -> const pc::sequencer::Pattern& { return pc::sequencer::patterns[(size_t) w.pattern]; };
     if (jumped || settingsChanged)
-        melodyStep (tune, melodyIndex (startInLoop), true, 0);
+        melodyStep (tune, melodyIndex (here), true, 0);
     if (restarted)
     {
         stopLaneChord (0);
         enterLaneSlot (now, snap);
-        if (const auto* hit = pc::sequencer::hitSoundingAt (pattern, stepInSlot (startInLoop, now)))
+        laneSection = here.section;
+        if (const auto* hit = pc::sequencer::hitSoundingAt (patternOf (here), stepInSlot (startInLoop, now)))
             startLaneHit (*hit, 0);
     }
 
@@ -367,32 +406,37 @@ void PotatoChordsProcessor::runLane (int numSamples)
     if (restarted && g < ppq + 1.0e-6)
     {
         // Already handled above for the chord; the melody still needs this step unless it restarted too
-        if (! (jumped || settingsChanged)) melodyStep (tune, melodyIndex (startInLoop), false, 0);
+        if (! (jumped || settingsChanged)) melodyStep (tune, melodyIndex (here), false, 0);
         g += stepQuarters;
     }
     for (int guard = 0; guard < 512 && g < endPpq - 1.0e-9; ++guard, g += stepQuarters)
     {
-        const double posInLoop = inLoop (g + 1.0e-9);
+        const auto w = where (g + 1.0e-9);
+        const double posInLoop = w.lanePos;
         const int slotIndex = snap.slotAt (posInLoop, barQ);
         const int samplePos = juce::jlimit (0, numSamples - 1, (int) std::llround ((g - ppq) / ppqPerSample));
-        if (slotIndex != laneCurrent)
+        // A new song section re-enters its slot even when it lands on the same one
+        if (slotIndex != laneCurrent || w.section != laneSection)
         {
+            laneSection = w.section;
             stopLaneChord (samplePos);
             enterLaneSlot (slotIndex, snap);
         }
-        const int tuneIndex = melodyIndex (posInLoop);
+        const int tuneIndex = melodyIndex (w);
         swingDelay = tuneIndex >= 0 && tuneIndex % 2 == 1 ? swingSamples : 0;
         melodyStep (tune, tuneIndex, false, samplePos);
         const int step = stepInSlot (posInLoop, slotIndex);
         swingDelay = step % 2 == 1 ? swingSamples : 0;
-        if (const auto* hit = pc::sequencer::hitStartingAt (pattern, step))
+        if (const auto* hit = pc::sequencer::hitStartingAt (patternOf (w), step))
             startLaneHit (*hit, samplePos);
-        else if (pc::sequencer::hitSoundingAt (pattern, step) == nullptr)
+        else if (pc::sequencer::hitSoundingAt (patternOf (w), step) == nullptr)
             stopLaneChord (samplePos);
     }
     swingDelay = 0;
 
-    melodyStepShown.store (melodyIndex (inLoop (endPpq - 1.0e-9)), std::memory_order_relaxed);
+    const auto last = where (endPpq - 1.0e-9);
+    melodyStepShown.store (melodyIndex (last), std::memory_order_relaxed);
+    sectionShown.store (last.section, std::memory_order_relaxed);
     expectedPpq = endPpq;
     laneRunning = true;
 }
@@ -601,6 +645,7 @@ void PotatoChordsProcessor::setStateInformation (const void* data, int sizeInByt
                 songLength = juce::jmax (0, (int) state.getProperty (songLengthProperty, 0));
                 song = state.hasProperty (songProperty) ? pc::song::Song::fromString (state[songProperty].toString().toStdString())
                                                         : pc::song::fromTemplate (songTemplate);
+                songLane.set (song);
             }
             apvts.replaceState (state);
             flushRequested = true;

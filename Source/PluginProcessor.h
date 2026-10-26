@@ -108,7 +108,9 @@ public:
         song = s.song;
         songTemplate = s.templateIndex;
         songLength = s.length;
+        songLane.set (s.song);
     }
+    int playingSection() const { return sectionShown.load (std::memory_order_relaxed); }  // -1 when not playing a song
 
     int editorWidth = 0;  // last window width, so the editor reopens at the same size (message thread only)
 
@@ -201,6 +203,7 @@ private:
     std::atomic<float>* humaniseParam = nullptr;
     std::atomic<float>* swingParam = nullptr;
     std::atomic<float>* melodyOctaveParam = nullptr;
+    std::atomic<float>* songPlayParam = nullptr;
     int swingDelay = 0;  // samples the next lane or melody note start is pushed late (set per 1/16 step in runLane)
     juce::Random random { 0x5eed };
 
@@ -227,6 +230,11 @@ private:
     double sampleRate = 48000.0, expectedPpq = 0.0;
     bool laneRunning = false;
     int laneCurrent = -1;
+    int laneSection = -1;  // song section the lane last entered (-1 outside Song play)
+    pc::song::SongLane songLane;
+    pc::song::Song laneSong;  // the song as the lane last played it
+    bool laneSongOn = false;
+    std::atomic<int> sectionShown { -1 };
     uint8_t laneCode = 0;
     Settings laneSettings;
     pc::voicing::Voiced lanePreviousClose, laneVoicing, lanePlaying;  // voicing of the slot, and the notes sounding now
