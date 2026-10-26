@@ -258,7 +258,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (sound, "The built-in sound you hear for chords. It never changes the MIDI sent to your instrument.");
     tip (chordKeys, "On: the white keys C to B in one octave play the 7 chords of the key, so one key plays a whole chord.");
     tip (preview, "Turns the built-in preview sound on or off. Turn it off when your own instrument plays the MIDI.");
-    tip (learn, "Shows the teaching extras: mood words and next-chord hints.");
+    tip (learn, "Shows the teaching extras: mood words and the three likeliest next chords, best first.");
     tip (majorFive, "Uses a major V chord in a minor key. It pulls strongly back to the home chord.");
     tip (undo, "Undo the last change to the progression or melody.");
     tip (redo, "Redo the change you just undid.");
@@ -419,7 +419,7 @@ void PotatoChordsEditor::refresh()
     const bool keysOn = proc.apvts.getRawParameterValue (pc::params::chordKeys.getParamID())->load() > 0.5f;
     const auto scaleNow = minor ? pc::theory::Scale::minor : pc::theory::Scale::major;
     const bool learning = proc.apvts.getRawParameterValue (pc::params::learn.getParamID())->load() > 0.5f;
-    const auto hints = learning ? pc::presets::nextChordHints (scaleNow, hintSource()) : uint8_t (0);
+    const int hintFrom = hintSource();
     const bool majorFiveOn = proc.apvts.getRawParameterValue (pc::params::majorFive.getParamID())->load() > 0.5f;
 
     std::array<juce::String, pc::theory::numDegrees> numerals;
@@ -427,7 +427,7 @@ void PotatoChordsEditor::refresh()
     {
         const auto chord = proc.chordFor (i);
         pads[(size_t) i]->setChord (chord, flats, held == i);
-        pads[(size_t) i]->setHint (((hints >> i) & 1) != 0);
+        pads[(size_t) i]->setHint (learning ? pc::presets::nextChordRank (scaleNow, hintFrom, i) : 0);
         pads[(size_t) i]->setMood (learning ? juce::String (pc::presets::moodWord (scaleNow, i, majorFiveOn)) : juce::String());
         numerals[(size_t) i] = fromLabel (pc::theory::romanNumeral (chord, i));
     }

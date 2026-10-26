@@ -457,6 +457,19 @@ void laneModelTests()
            "preset i-iv-VI-V fills 8 bars with the major V");
     CHECK ((pc::presets::nextChordHints (Scale::major, 4) & 1) != 0, "after V, I is suggested");
     CHECK ((pc::presets::nextChordHints (Scale::minor, 0) & (1 << 5)) != 0, "after i, VI is suggested");
+    CHECK (pc::presets::nextChordRank (Scale::major, 0, 3) == 1 && pc::presets::nextChordRank (Scale::major, 0, 4) == 2
+           && pc::presets::nextChordRank (Scale::major, 0, 5) == 3 && pc::presets::nextChordRank (Scale::major, 0, 1) == 0,
+           "after I the hints rank IV, then V, then vi");
+    CHECK (pc::presets::nextChordRank (Scale::major, 4, 0) == 1 && pc::presets::nextChordRank (Scale::major, 4, 5) == 2
+           && pc::presets::nextChordRank (Scale::major, 4, 3) == 0, "after V, I comes first, then vi");
+    CHECK (pc::presets::nextChordRank (Scale::minor, 0, 3) == 1 && pc::presets::nextChordRank (Scale::minor, -1, 0) == 0,
+           "after i, iv comes first; no source chord, no hints");
+    bool maskMatches = true;
+    for (int d = 0; d < 7; ++d)
+        for (auto sc : { Scale::major, Scale::minor })
+            for (int c = 0; c < 7; ++c)
+                maskMatches = maskMatches && ((pc::presets::nextChordHints (sc, d) >> c) & 1) == (pc::presets::nextChordRank (sc, d, c) > 0 ? 1 : 0);
+    CHECK (maskMatches, "the hint mask and the ranking agree");
 }
 
 // Plays `blocks` blocks against the play head, collecting chord note-ons and note-offs

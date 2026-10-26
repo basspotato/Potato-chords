@@ -40,30 +40,49 @@ namespace pc::presets
         return s;
     }
 
-    // Chords that commonly follow `degree`, strongest first, as a bit mask of degrees (bit d = degree d).
+    // Up to three chords that commonly follow `degree`, strongest first (degrees 0-6, -1 = no more).
     // Plain common-practice and pop tendencies: the V wants home, IV lifts to V, vi falls to IV, and so on.
+    using Ranked = std::array<int8_t, 3>;
+    constexpr Ranked nextChordRanked (theory::Scale s, int degree)
+    {
+        constexpr Ranked major[7] {
+            { 3, 4, 5 },    // I   -> IV, V, vi
+            { 4, 6, -1 },   // ii  -> V, vii
+            { 5, 3, -1 },   // iii -> vi, IV
+            { 4, 0, 1 },    // IV  -> V, I, ii
+            { 0, 5, -1 },   // V   -> I, vi
+            { 3, 1, 4 },    // vi  -> IV, ii, V
+            { 0, 2, -1 },   // vii -> I, iii
+        };
+        constexpr Ranked minor[7] {
+            { 3, 5, 6 },    // i   -> iv, VI, VII
+            { 4, 0, -1 },   // ii  -> v/V, i
+            { 5, 3, -1 },   // III -> VI, iv
+            { 4, 0, 6 },    // iv  -> v/V, i, VII
+            { 0, 5, -1 },   // v   -> i, VI
+            { 2, 6, 3 },    // VI  -> III, VII, iv
+            { 2, 0, -1 },   // VII -> III, i
+        };
+        if (degree < 0 || degree > 6) return { -1, -1, -1 };
+        return s == theory::Scale::major ? major[degree] : minor[degree];
+    }
+
+    // The same chords as a bit mask of degrees (bit d = degree d)
     constexpr uint8_t nextChordHints (theory::Scale s, int degree)
     {
-        constexpr uint8_t majorHints[7] {
-            (1 << 3) | (1 << 4) | (1 << 5),  // I   -> IV, V, vi
-            (1 << 4) | (1 << 6),             // ii  -> V, vii
-            (1 << 5) | (1 << 3),             // iii -> vi, IV
-            (1 << 4) | (1 << 0) | (1 << 1),  // IV  -> V, I, ii
-            (1 << 0) | (1 << 5),             // V   -> I, vi
-            (1 << 3) | (1 << 1) | (1 << 4),  // vi  -> IV, ii, V
-            (1 << 0) | (1 << 2),             // vii -> I, iii
-        };
-        constexpr uint8_t minorHints[7] {
-            (1 << 3) | (1 << 5) | (1 << 6),  // i   -> iv, VI, VII
-            (1 << 4) | (1 << 0),             // ii  -> v/V, i
-            (1 << 5) | (1 << 3),             // III -> VI, iv
-            (1 << 4) | (1 << 0) | (1 << 6),  // iv  -> v/V, i, VII
-            (1 << 0) | (1 << 5),             // v   -> i, VI
-            (1 << 2) | (1 << 6) | (1 << 3),  // VI  -> III, VII, iv
-            (1 << 2) | (1 << 0),             // VII -> III, i
-        };
-        if (degree < 0 || degree > 6) return 0;
-        return s == theory::Scale::major ? majorHints[degree] : minorHints[degree];
+        uint8_t mask = 0;
+        for (const int d : nextChordRanked (s, degree))
+            if (d >= 0) mask = (uint8_t) (mask | (1 << d));
+        return mask;
+    }
+
+    // 1 = the strongest next chord, 2 and 3 the runners-up, 0 = not suggested
+    constexpr int nextChordRank (theory::Scale s, int degree, int candidate)
+    {
+        const auto list = nextChordRanked (s, degree);
+        for (int i = 0; i < 3; ++i)
+            if (list[(size_t) i] == candidate) return i + 1;
+        return 0;
     }
 
     // One word for how each chord feels in its key, for the teaching display

@@ -21,10 +21,10 @@ namespace pc::gui
             if (m != mood) { mood = m; repaint(); }
         }
 
-        // Marks the pad as a good next chord
-        void setHint (bool h)
+        // Marks the pad as a good next chord: 1 = best, 2 and 3 = runners-up, 0 = none
+        void setHint (int rank)
         {
-            if (h != hint) { hint = h; repaint(); }
+            if (rank != hint) { hint = rank; repaint(); }
         }
 
         void setChord (const theory::Chord& c, bool useFlats, bool isActive)
@@ -56,17 +56,18 @@ namespace pc::gui
             g.setColour (active ? rootColour : rootColour.withAlpha (0.35f));
             g.drawRoundedRectangle (r.reduced (2.0f), 12.0f, active ? 2.0f : 1.0f);
 
-            if (hint && ! active)
+            if (hint > 0 && ! active)
             {
-                g.setColour (colours::accent.withAlpha (0.8f));
+                const float strength = hint == 1 ? 1.0f : hint == 2 ? 0.65f : 0.4f;
+                g.setColour (colours::accent.withAlpha (0.8f * strength));
                 g.drawRoundedRectangle (r.reduced (1.0f), 13.0f, 1.5f);
                 auto tag = juce::Rectangle<float> (40.0f, 16.0f).withCentre ({ r.getCentreX(), r.getY() + 1.0f });
-                look::glow (g, tag, 8.0f, colours::accent, 0.8f);
-                g.setColour (colours::accent);
+                look::glow (g, tag, 8.0f, colours::accent, 0.8f * strength);
+                g.setColour (colours::accent.withAlpha (0.5f + 0.5f * strength));
                 g.fillRoundedRectangle (tag, 8.0f);
                 g.setColour (colours::text);
                 g.setFont (look::font (10.5f));
-                g.drawText ("NEXT", tag, juce::Justification::centred, false);
+                g.drawText (hint == 1 ? "NEXT" : hint == 2 ? "2nd" : "3rd", tag, juce::Justification::centred, false);
             }
 
             auto inner = r.reduced (10.0f);
@@ -113,7 +114,8 @@ namespace pc::gui
     private:
         int degree;
         theory::Chord chord;
-        bool flats = false, active = false, hint = false;
+        bool flats = false, active = false;
+        int hint = 0;
         juce::String name, numeral, mood;
     };
 }

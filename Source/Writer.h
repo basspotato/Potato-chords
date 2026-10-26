@@ -316,9 +316,8 @@ namespace pc::writer
                     int degree = 0;
                     if (prev >= 0)
                     {
-                        const uint8_t hints = presets::nextChordHints (scale, prev);
-                        for (int d = 0; d < 7; ++d)
-                            if ((hints & (1 << d)) != 0 && d != nextBar) { degree = d; break; }
+                        for (const int d : presets::nextChordRanked (scale, prev))
+                            if (d >= 0 && d != nextBar) { degree = d; break; }
                     }
                     else if (nextBar == 0) degree = 4;
                     fill (bar, degree, false);
