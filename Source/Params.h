@@ -33,6 +33,9 @@ namespace pc::params
     inline const juce::ParameterID songPlay  { "songPlay", 1 };
     inline const juce::ParameterID humanise  { "humanise", 1 };
     inline const juce::ParameterID linkMelody { "linkMelody", 1 };
+    inline const juce::ParameterID volume    { "volume", 1 };
+
+    constexpr float volumeMinDb = -48.0f;  // the bottom of the range is silence
 
     inline const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     inline const juce::StringArray scaleNames { "Major", "Minor" };
@@ -87,6 +90,9 @@ namespace pc::params
         layout.add (std::make_unique<juce::AudioParameterFloat> (reverb, "Reverb", juce::NormalisableRange<float> (0.0f, 1.0f), 0.25f));
         // On: the melody uses the chords' Octave and Sound instead of its own
         layout.add (std::make_unique<juce::AudioParameterBool> (linkMelody, "Link melody to chords", false));
+        // Level of the preview sound only, in dB; MIDI out is untouched
+        layout.add (std::make_unique<juce::AudioParameterFloat> (volume, "Volume", juce::NormalisableRange<float> (volumeMinDb, 6.0f, 0.1f), 0.0f,
+                                                                 juce::AudioParameterFloatAttributes().withLabel ("dB")));
         return layout;
     }
 }

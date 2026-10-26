@@ -1554,6 +1554,29 @@ void processorTests()
     proc->processBlock (buffer, midi);
     CHECK (buffer.getMagnitude (0, blockSize) <= 0.0f && midi.getNumEvents() == 1, "preview off: silent, MIDI still out");
 
+    // Main volume: -12 dB is a quarter of the level, the bottom of the range is silence, MIDI is untouched
+    {
+        auto levelAt = [] (float db, int* events)
+        {
+            std::unique_ptr<PotatoChordsProcessor> v { dynamic_cast<PotatoChordsProcessor*> (createPluginFilter()) };
+            v->setPlayConfigDetails (0, 2, sampleRate, blockSize);
+            v->prepareToPlay (sampleRate, blockSize);
+            setParam (*v, pc::params::volume, db);
+            juce::AudioBuffer<float> b (2, blockSize);
+            juce::MidiBuffer m;
+            m.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            v->processBlock (b, m);
+            *events = m.getNumEvents();
+            m.clear();
+            v->processBlock (b, m);  // past the first block's ramp
+            return b.getMagnitude (0, 0, blockSize);
+        };
+        int events0 = 0, eventsQuiet = 0, eventsOff = 0;
+        const float full = levelAt (0.0f, &events0), quiet = levelAt (-12.0f, &eventsQuiet), off = levelAt (pc::params::volumeMinDb, &eventsOff);
+        CHECK (full > 0.0f && std::abs (quiet / full - 0.251f) < 0.03f, "volume at -12 dB plays at a quarter of the level");
+        CHECK (off <= 0.0f && eventsOff == 1 && events0 == 1 && eventsQuiet == 1, "volume at the bottom is silent, MIDI still out");
+    }
+
     // State round trip into a fresh instance
     proc->apvts.getParameter (pc::params::key.getParamID())->setValueNotifyingHost (
         proc->apvts.getParameter (pc::params::key.getParamID())->convertTo0to1 (7.0f));

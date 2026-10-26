@@ -54,6 +54,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
       learn (param (p, pc::params::learn), "Learn"),
       playSong (param (p, pc::params::songPlay), "Play song"),
       linkMelody (param (p, pc::params::linkMelody), "Link to chords"),
+      volume (param (p, pc::params::volume), "Vol"),
       chorusFader (param (p, pc::params::chorus), "Chorus"),
       reverbFader (param (p, pc::params::reverb), "Reverb"),
       strumFader (param (p, pc::params::strum), "Strum"),
@@ -152,7 +153,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     for (auto* c : std::initializer_list<juce::Component*> { &key, &scale, &flavour, &spread, &sound, &chordKeys, &preview, &majorFive,
                                                             &playLane, &learn, &rhythm, &exportMidi, &presets, &writeLane, &clearLane, &dragLane, &dragTake, &capture,
                                                             &logo, &display, &lane, &keyboard,
-                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &writeMelody, &linkMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &songSync, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
+                                                            &melodyLane, &melodySound, &clearMelody, &repeatMelody, &writeMelody, &linkMelody, &dragMelody, &viewTabs, &songTemplate, &songLength, &songBpm, &songSync, &playSong, &dragSong, &songStrip, &panic, &undo, &redo, &volume, &chorusFader, &reverbFader, &strumFader, &octave, &melodyOctave, &velocityFader, &humaniseFader, &swingFader })
         addAndMakeVisible (c);
     addChildComponent (writer);  // added last so they open on top
     addChildComponent (melodyWriter);
@@ -296,6 +297,7 @@ PotatoChordsEditor::PotatoChordsEditor (PotatoChordsProcessor& p)
     tip (swingFader, "Pushes every second 1/16 note late for a bouncy, shuffled feel.");
     tip (chorusFader, "Thickens the preview sound. Does not change the MIDI.");
     tip (reverbFader, "Adds room to the preview sound. Does not change the MIDI.");
+    tip (volume, "Main volume of the preview sound. Drag up or down, Shift for fine, double-click for 0 dB. Does not change the MIDI.");
     tip (panic, "Stops every sounding note. Use it if a note ever gets stuck.");
     tip (keyboard, "Lights up the notes that are playing, in their note colours. Click a key to play it (drag to slide); "
                    "with Chord keys on, the marked octave plays chords.");
@@ -638,18 +640,20 @@ void PotatoChordsEditor::resized()
 
     const int right = width - margin;
     logo.setBounds (margin - 4, topY - 6, 66, topH + 12);
-    auto top = juce::Rectangle<int> (318, topY, right - 318, topH);
-    key.setBounds (top.removeFromLeft (76));
+    auto top = juce::Rectangle<int> (292, topY, right - 4 - 292, topH);
+    key.setBounds (top.removeFromLeft (72));
     top.removeFromLeft (8);
-    scale.setBounds (top.removeFromLeft (160));
+    scale.setBounds (top.removeFromLeft (150));
     top.removeFromLeft (10);
     undo.setBounds (top.removeFromLeft (38));
     redo.setBounds (top.removeFromLeft (38));
-    preview.setBounds (top.removeFromRight (100));
+    volume.setBounds (top.removeFromRight (70));
+    top.removeFromRight (2);
+    preview.setBounds (top.removeFromRight (88));
     top.removeFromRight (8);
-    chordKeys.setBounds (top.removeFromRight (124));
+    chordKeys.setBounds (top.removeFromRight (108));
     top.removeFromRight (8);
-    learn.setBounds (top.removeFromRight (92));
+    learn.setBounds (top.removeFromRight (78));
 
     flavour.setBounds (margin + 74, flavourY, 450, rowH);
     spread.setBounds (622, flavourY, 156, rowH);

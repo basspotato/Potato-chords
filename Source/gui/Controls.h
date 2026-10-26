@@ -185,6 +185,101 @@ namespace pc::gui
         juce::ParameterAttachment attachment;
     };
 
+    // A small rotary knob: drag up or down (Shift for fine), wheel, double-click for the default.
+    // The label sits to the left of the dial; the value shows while the mouse is over it.
+    class Knob : public juce::Component, public juce::SettableTooltipClient
+    {
+    public:
+        Knob (juce::RangedAudioParameter& p, juce::String labelText)
+            : param (p), label (std::move (labelText)),
+              attachment (p, [this] (float v) { value = v; repaint(); })
+        {
+            attachment.sendInitialUpdate();
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat();
+            const float size = r.getHeight() - 4.0f;
+            const auto dial = r.removeFromRight (size + 2.0f).withSizeKeepingCentre (size, size);
+            const float norm = param.convertTo0to1 (value);
+            constexpr float start = -2.4f, end = 2.4f;
+            const float angle = start + norm * (end - start);
+            const auto c = dial.getCentre();
+            const float ring = size * 0.5f - 2.0f;
+
+            juce::Path track, lit;
+            track.addCentredArc (c.x, c.y, ring, ring, 0.0f, start, end, true);
+            g.setColour (colours::well);
+            g.strokePath (track, juce::PathStrokeType (3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            if (norm > 0.0f)
+            {
+                lit.addCentredArc (c.x, c.y, ring, ring, 0.0f, start, angle, true);
+                g.setColour (colours::accent.withAlpha (0.35f));
+                g.strokePath (lit, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.setColour (colours::accent);
+                g.strokePath (lit, juce::PathStrokeType (3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+
+            const auto cap = dial.reduced (6.5f);
+            look::raised (g, cap, cap.getWidth() * 0.5f, colours::panelLight);
+            g.setColour (colours::text);
+            g.drawLine ({ c.getPointOnCircumference (cap.getWidth() * 0.12f, angle), c.getPointOnCircumference (cap.getWidth() * 0.5f - 3.0f, angle) }, 2.2f);
+
+            const bool showValue = hover || dragging;
+            const auto text = ! showValue ? label
+                            : value <= param.getNormalisableRange().start ? juce::String ("Off")
+                            : juce::String (value, 1) + " dB";
+            g.setFont (look::font (showValue ? 12.0f : 13.0f));
+            g.setColour (showValue ? colours::text : colours::textDim);
+            g.drawText (text, r.withTrimmedRight (4.0f), juce::Justification::centredRight, false);
+        }
+
+        void mouseEnter (const juce::MouseEvent&) override { hover = true; repaint(); }
+        void mouseExit (const juce::MouseEvent&) override  { hover = false; repaint(); }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            dragging = true;
+            startNorm = param.convertTo0to1 (value);
+            startY = e.y;
+            attachment.beginGesture();
+        }
+
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            const float range = e.mods.isShiftDown() ? 600.0f : 150.0f;  // pixels for the full sweep
+            const float norm = juce::jlimit (0.0f, 1.0f, startNorm + (float) (startY - e.y) / range);
+            attachment.setValueAsPartOfGesture (param.convertFrom0to1 (norm));
+        }
+
+        void mouseUp (const juce::MouseEvent&) override
+        {
+            dragging = false;
+            attachment.endGesture();
+            repaint();
+        }
+
+        void mouseDoubleClick (const juce::MouseEvent&) override
+        {
+            attachment.setValueAsCompleteGesture (param.convertFrom0to1 (param.getDefaultValue()));
+        }
+
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override
+        {
+            const float norm = juce::jlimit (0.0f, 1.0f, param.convertTo0to1 (value) + w.deltaY * 0.1f);
+            attachment.setValueAsCompleteGesture (param.convertFrom0to1 (norm));
+        }
+
+    private:
+        juce::RangedAudioParameter& param;
+        juce::String label;
+        float value = 0.0f, startNorm = 0.0f;
+        int startY = 0;
+        bool hover = false, dragging = false;
+        juce::ParameterAttachment attachment;
+    };
+
     // A push button in the same raised style
     class ActionButton : public juce::Component, public juce::SettableTooltipClient
     {

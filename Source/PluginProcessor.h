@@ -221,6 +221,8 @@ private:
     std::atomic<float>* swingParam = nullptr;
     std::atomic<float>* melodyOctaveParam = nullptr;
     std::atomic<float>* linkMelodyParam = nullptr;
+    std::atomic<float>* volumeParam = nullptr;
+    float volumeGain = 1.0f;
     std::atomic<float>* songPlayParam = nullptr;
     int swingDelay = 0;  // samples the next lane or melody note start is pushed late (set per 1/16 step in runLane)
     juce::Random random { 0x5eed };

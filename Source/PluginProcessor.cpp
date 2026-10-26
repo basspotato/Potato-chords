@@ -40,6 +40,7 @@ PotatoChordsProcessor::PotatoChordsProcessor()
     melodyOctaveParam = apvts.getRawParameterValue (melodyOctave.getParamID());
     songPlayParam = apvts.getRawParameterValue (songPlay.getParamID());
     linkMelodyParam = apvts.getRawParameterValue (linkMelody.getParamID());
+    volumeParam = apvts.getRawParameterValue (volume.getParamID());
     songLane.set (song);
 
     out.ensureSize (8192);
@@ -543,6 +544,18 @@ void PotatoChordsProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     if (done < buffer.getNumSamples())
         synth.render (left + done, right + done, buffer.getNumSamples() - done);
     fx.process (left, right, buffer.getNumSamples(), chorusParam->load(), reverbParam->load());
+
+    // Main volume, ramped over the block so a knob move never clicks
+    const float db = volumeParam->load();
+    const float target = db <= pc::params::volumeMinDb ? 0.0f : juce::Decibels::decibelsToGain (db);
+    const float step = (target - volumeGain) / (float) juce::jmax (1, buffer.getNumSamples());
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        volumeGain += step;
+        left[i] *= volumeGain;
+        right[i] *= volumeGain;
+    }
+    volumeGain = target;
 
     // Gentle soft clip so stacked chords never overload
     for (int ch = 0; ch < 2; ++ch)
