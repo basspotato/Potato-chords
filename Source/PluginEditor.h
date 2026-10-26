@@ -40,6 +40,7 @@ private:
     pc::midiexport::Feel feel (bool forMelody) const;
     juce::File songFile (int first, int last, const juce::String& name);
     void applySongChoice();
+    void setSongBpm (int bpm);  // 0 = sync to the DAW's tempo
     void showView (bool song);
 
     PotatoChordsProcessor& proc;
@@ -66,6 +67,7 @@ private:
     juce::ComboBox songTemplate, songLength, songBpm;
     pc::gui::DragChip dragSong { "Drag song" };
     pc::gui::SongStrip songStrip;
+    pc::gui::LedToggle songSync { "Sync", pc::gui::colours::accent };
     pc::gui::WriterPanel writer { "WRITE A PROGRESSION", "Style", pc::gui::namesOf (pc::writer::styleNames),
                                   "Mood", pc::gui::namesOf (pc::writer::moodNames), "Complete empty bars" },
                          melodyWriter { "WRITE A MELODY", "Shape", pc::gui::namesOf (pc::melodywriter::shapeNames),
